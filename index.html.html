@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kaboom.js Platform Game</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #2c3e50;
+            font-family: Arial, sans-serif;
+        }
+        canvas {
+            border: 2px solid #34495e;
+            background-color: #87CEEB;
+        }
+        .instructions {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-size: 14px;
+            background: rgba(0,0,0,0.7);
+            padding: 10px;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="instructions">
+        <p><strong>Controls:</strong></p>
+        <p>A/D or Arrow Keys: Move left/right</p>
+        <p>W or Space: Jump</p>
+        <p><strong>Goal:</strong> Collect all yellow coins to win!</p>
+        <p><strong>Danger:</strong> Avoid purple monsters (3 lives)</p>
+        <p><strong>NEW:</strong> Enhanced visuals & particle effects!</p>
+    </div>
+    
+    <script src="https://unpkg.com/kaboom@3000/dist/kaboom.js"></script>
+    <script>
+        // Initialize Kaboom
+        kaboom({
+            width: 800,
+            height: 600,
+            background: [135, 206, 235], // Sky blue
+        });
+
+        // Set gravity
+        setGravity(1600);
+
+        // Define colors for our squares
+        const PLAYER_COLOR = [255, 100, 100]; // Red
+        const PLATFORM_COLOR = [100, 255, 100]; // Green
+        const GROUND_COLOR = [139, 69, 19]; // Brown
+        const MONSTER_COLOR = [150, 50, 200]; // Purple
+
+        // Create animated player with enhanced visuals
+        const player = add([
+            rect(28, 28),
+            outline(2, [255, 255, 255]), // White outline
+            color(...PLAYER_COLOR),
+            pos(100, 300),
+            area(),
+            body(),
+            "player"
+        ]);
+
+        // Add custom properties to player
+        player.animationTime = 0;
+        player.facingRight = true;
+        player.blinkTimer = 0;
+
+        // Enhanced Player Character Parts
+        // Player's face
+        const playerFace = add([
+            circle(10),
+            color(255, 150, 150),
+            pos(player.pos.x + 14, player.pos.y + 10),
+            "playerFace"
+        ]);
+
+        // Player's eyes
+        const leftEye = add([
+            circle(3),
+            color(255, 255, 255),
+            pos(player.pos.x + 9, player.pos.y + 8),
+            "playerEye"
+        ]);
+
+        const rightEye = add([
+            circle(3),
+            color(255, 255, 255),
+            pos(player.pos.x + 19, player.pos.y + 8),
+            "playerEye"
+        ]);
+
+        // Eye pupils
+        const leftPupil = add([
+            circle(1.5),
+            color(0, 0, 0),
+            pos(player.pos.x + 9, player.pos.y + 8),
+            "playerPupil"
+        ]);
+
+        const rightPupil = add([
+            circle(1.5),
+            color(0, 0, 0),
+            pos(player.pos.x + 19, player.pos.y + 8),
+            "playerPupil"
+        ]);
+
+        // Player's feet
+        const leftFoot = add([
+            rect(6, 4),
+            color(150, 50, 50),
+            pos(player.pos.x + 3, player.pos.y + 28),
+            "playerFoot"
+        ]);
+
+        const rightFoot = add([
+            rect(6, 4),
+            color(150, 50, 50),
+            pos(player.pos.x + 19, player.pos.y + 28),
+            "playerFoot"
+        ]);
+
+        // Enhanced ground platform
+        add([
+            rect(800, 60),
+            color(...GROUND_COLOR),
+            outline(2, [0, 0, 0]),
+            pos(0, 540),
+            area(),
+            "platform"
+        ]);
+
+        // Optimized platforms - all within jumping reach (max ~110px vertical gap)
+        const platforms = [
+            { x: 200, y: 460, width: 150, height: 20 },   // Platform 1 - easier reach from ground
+            { x: 400, y: 380, width: 120, height: 20 },   // Platform 2 - 80px gap from platform 1
+            { x: 580, y: 310, width: 120, height: 20 },   // Platform 3 - 70px gap, closer horizontally
+            { x: 320, y: 240, width: 140, height: 20 },   // Platform 4 - 70px gap, overlaps with platform 3
+            { x: 120, y: 170, width: 130, height: 20 },   // Platform 5 - 70px gap, wider for easier landing
+            { x: 480, y: 100, width: 160, height: 20 },   // Platform 6 - 70px gap, wider and closer
+            { x: 80, y: 60, width: 120, height: 20 },     // Platform 7 - 40px gap, easier jump
+            { x: 650, y: 200, width: 100, height: 20 },   // Platform 8 - accessible from platform 6
+        ];
+
+        // Create enhanced platform objects
+        platforms.forEach((platform, index) => {
+            add([
+                rect(platform.width, platform.height),
+                color(...PLATFORM_COLOR),
+                outline(1, [0, 100, 0]),
+                pos(platform.x, platform.y),
+                area(),
+                "platform"
+            ]);
+            
+            // Add decorative elements on some platforms
+            if (index % 2 === 0) {
+                add([
+                    rect(4, 8),
+                    color(0, 150, 0),
+                    pos(platform.x + platform.width/2, platform.y - 8),
+                    "decoration"
+                ]);
+            }
+        });
+
+        // Add background stars for visual appeal
+        for (let i = 0; i < 20; i++) {
+            add([
+                circle(1 + Math.random() * 2),
+                color(255, 255, 255),
+                pos(Math.random() * 800, Math.random() * 400),
+                opacity(0.7),
+                "star"
+            ]);
+        }
+
+        // Player movement variables
+        const MOVE_SPEED = 200;
+        const JUMP_FORCE = 600;
+
+        // Track if player is on ground
+        let grounded = false;
+
+        // Movement controls
+        onKeyDown("a", () => {
+            player.vel.x = -MOVE_SPEED;
+        });
+
+        onKeyDown("left", () => {
+            player.vel.x = -MOVE_SPEED;
+        });
+
+        onKeyDown("d", () => {
+            player.vel.x = MOVE_SPEED;
+        });
+
+        onKeyDown("right", () => {
+            player.vel.x = MOVE_SPEED;
+        });
+
+        // Stop horizontal movement when keys are released
+        onKeyRelease(["a", "left"], () => {
+            player.vel.x = 0;
+        });
+
+        onKeyRelease(["d", "right"], () => {
+            player.vel.x = 0;
+        });
+
+        // Jump controls with particle effects
+        onKeyPress("w", () => {
+            if (grounded) {
+                player.vel.y = -JUMP_FORCE;
+                grounded = false;
+                createJumpParticles(player.pos.x + 14, player.pos.y + 28);
+            }
+        });
+
+        onKeyPress("space", () => {
+            if (grounded) {
+                player.vel.y = -JUMP_FORCE;
+                grounded = false;
+                createJumpParticles(player.pos.x + 14, player.pos.y + 28);
+            }
+        });
+
+        // Particle effect functions
+        function createJumpParticles(x, y) {
+            for (let i = 0; i < 8; i++) {
+                add([
+                    circle(2),
+                    color(255, 255, 255),
+                    pos(x + rand(-10, 10), y + 20),
+                    lifespan(0.8),
+                    move(vec2(rand(-50, 50), rand(-150, -50))),
+                    "jumpParticle"
+                ]);
+            }
+        }
+
+        function createDeathParticles(x, y) {
+            for (let i = 0; i < 15; i++) {
+                add([
+                    rect(3, 3),
+                    color(255, rand(0, 100), 0),
+                    pos(x + rand(-5, 5), y + rand(-5, 5)),
+                    lifespan(1.5),
+                    move(vec2(rand(-150, 150), rand(-150, 150))),
+                    "deathParticle"
+                ]);
+            }
+        }
+
+        function createCoinParticles(x, y) {
+            for (let i = 0; i < 10; i++) {
+                add([
+                    circle(1),
+                    color(255, 255, 0),
+                    pos(x, y),
+                    lifespan(1),
+                    move(vec2(rand(-80, 80), rand(-120, -20))),
+                    "coinParticle"
+                ]);
+            }
+        }
+
+        // Game state
+        let coinsCollected = 0;
+        let totalCoins = 0;
+        let playerLives = 3;
+        let gameOver = false;
+
+        // Enhanced coins positioned on optimized platforms
+        const coinPositions = [
+            { x: 275, y: 430 },  // On platform 1 (y: 460 - 30)
+            { x: 460, y: 350 },  // On platform 2 (y: 380 - 30)  
+            { x: 640, y: 280 },  // On platform 3 (y: 310 - 30)
+            { x: 390, y: 210 },  // On platform 4 (y: 240 - 30)
+            { x: 185, y: 140 },  // On platform 5 (y: 170 - 30)
+            { x: 560, y: 70 },   // On platform 6 (y: 100 - 30)
+            { x: 140, y: 30 },   // On platform 7 (y: 60 - 30)
+            { x: 700, y: 170 },  // On platform 8 (y: 200 - 30)
+        ];
+
+        // Add enhanced coins with glow effect
+        coinPositions.forEach(coinPos => {
+            // Outer glow
+            add([
+                circle(12),
+                color(255, 255, 100),
+                opacity(0.3),
+                pos(coinPos.x, coinPos.y),
+                "coinGlow"
+            ]);
+            
+            // Main coin
+            const coin = add([
+                circle(8),
+                color(255, 255, 0),
+                outline(1, [255, 200, 0]),
+                pos(coinPos.x, coinPos.y),
+                area(),
+                "coin"
+            ]);
+            
+            // Add custom properties separately
+            coin.rotationSpeed = 2;
+            coin.bobTime = 0;
+            totalCoins++;
+        });
+
+        // Create AI monsters that patrol optimized platforms
+        const monsterData = [
+            { platform: 0, x: 250, y: 436 },  // On platform 1 (y: 460 - 24)
+            { platform: 2, x: 620, y: 286 },  // On platform 3 (y: 310 - 24)  
+            { platform: 4, x: 150, y: 146 },  // On platform 5 (y: 170 - 24)
+            { platform: 6, x: 110, y: 36 },   // On platform 7 (y: 60 - 24)
+        ];
+
+        const monsters = [];
+        monsterData.forEach((monsterInfo, index) => {
+            // Monster body
+            const monster = add([
+                rect(24, 24),
+                color(...MONSTER_COLOR),
+                outline(2, [100, 20, 150]),
+                pos(monsterInfo.x, monsterInfo.y),
+                area(),
+                "monster"
+            ]);
+            
+            // Monster spikes
+            const spike1 = add([
+                polygon([vec2(0, 0), vec2(4, -8), vec2(8, 0)]),
+                color(200, 50, 250),
+                pos(monsterInfo.x + 4, monsterInfo.y),
+                "monsterSpike"
+            ]);
+
+            const spike2 = add([
+                polygon([vec2(0, 0), vec2(4, -8), vec2(8, 0)]),
+                color(200, 50, 250),
+                pos(monsterInfo.x + 12, monsterInfo.y),
+                "monsterSpike"
+            ]);
+
+            // Glowing monster eyes
+            const monsterEye1 = add([
+                circle(2),
+                color(255, 0, 0),
+                pos(monsterInfo.x + 6, monsterInfo.y + 8),
+                "monsterEye"
+            ]);
+
+            const monsterEye2 = add([
+                circle(2),
+                color(255, 0, 0),
+                pos(monsterInfo.x + 16, monsterInfo.y + 8),
+                "monsterEye"
+            ]);
+            
+            // Store references for animation
+            monster.spikes = [spike1, spike2];
+            monster.eyes = [monsterEye1, monsterEye2];
+            monster.patrolLeft = platforms[monsterInfo.platform].x + 10;
+            monster.patrolRight = platforms[monsterInfo.platform].x + platforms[monsterInfo.platform].width - 34;
+            monster.direction = index % 2 === 0 ? 1 : -1;
+            monster.speed = 50 + Math.random() * 30;
+            monster.animTime = 0;
+            monster.platformIndex = monsterInfo.platform;
+            
+            monsters.push(monster);
+        });
+
+        // Add UI elements
+        const coinText = add([
+            text(`Coins: ${coinsCollected}/${totalCoins}`, { size: 24 }),
+            pos(20, 20),
+            color(255, 255, 255),
+            fixed(),
+            "ui"
+        ]);
+
+        const livesText = add([
+            text(`Lives: ${playerLives}`, { size: 24 }),
+            pos(20, 50),
+            color(255, 100, 100),
+            fixed(),
+            "ui"
+        ]);
+
+        // Enhanced coin collection with effects
+        player.onCollide("coin", (coin) => {
+            // Remove coin and its glow
+            const coinPos = coin.pos.clone();
+            coin.destroy();
+            
+            // Remove corresponding glow
+            get("coinGlow").forEach(glow => {
+                if (glow.pos.dist(coinPos) < 5) {
+                    glow.destroy();
+                }
+            });
+            
+            coinsCollected++;
+            coinText.text = `Coins: ${coinsCollected}/${totalCoins}`;
+            
+            // Enhanced collection effects
+            createCoinParticles(coinPos.x, coinPos.y);
+            add([
+                text("+1", { size: 20 }),
+                pos(coinPos.x, coinPos.y),
+                color(255, 255, 0),
+                lifespan(1),
+                move(UP, 50),
+                "collectEffect"
+            ]);
+            
+            // Check win condition
+            if (coinsCollected >= totalCoins && !gameOver) {
+                add([
+                    text("YOU WIN! All coins collected!", { size: 32 }),
+                    pos(width()/2 - 200, height()/2),
+                    color(0, 255, 0),
+                    fixed(),
+                    "winText"
+                ]);
+                gameOver = true;
+            }
+        });
+
+        // Player death and respawn system
+        function playerDeath() {
+            if (gameOver) return;
+            
+            createDeathParticles(player.pos.x + 14, player.pos.y + 14);
+            playerLives--;
+            livesText.text = `Lives: ${playerLives}`;
+            
+            // Death effect
+            add([
+                text("OUCH!", { size: 24 }),
+                pos(player.pos.x, player.pos.y - 30),
+                color(255, 0, 0),
+                lifespan(1),
+                "deathEffect"
+            ]);
+            
+            if (playerLives <= 0) {
+                // Game over
+                add([
+                    text("GAME OVER!", { size: 48 }),
+                    pos(width()/2 - 150, height()/2 - 50),
+                    color(255, 0, 0),
+                    fixed(),
+                    "gameOverText"
+                ]);
+                add([
+                    text("Refresh to play again", { size: 24 }),
+                    pos(width()/2 - 120, height()/2 + 20),
+                    color(255, 255, 255),
+                    fixed(),
+                    "restartText"
+                ]);
+                gameOver = true;
+            } else {
+                // Respawn player
+                player.pos = vec2(100, 300);
+                player.vel = vec2(0, 0);
+                grounded = false;
+            }
+        }
+
+        // Monster collision
+        player.onCollide("monster", () => {
+            playerDeath();
+        });
+
+        // Enhanced update loop with animations
+        onUpdate(() => {
+            if (gameOver) return;
+
+            // Update player parts positions
+            playerFace.pos = vec2(player.pos.x + 14, player.pos.y + 10);
+            leftEye.pos = vec2(player.pos.x + 9, player.pos.y + 8);
+            rightEye.pos = vec2(player.pos.x + 19, player.pos.y + 8);
+            leftPupil.pos = vec2(player.pos.x + 9, player.pos.y + 8);
+            rightPupil.pos = vec2(player.pos.x + 19, player.pos.y + 8);
+            leftFoot.pos = vec2(player.pos.x + 3, player.pos.y + 28);
+            rightFoot.pos = vec2(player.pos.x + 19, player.pos.y + 28);
+
+            // Player blinking animation
+            player.blinkTimer += dt();
+            if (player.blinkTimer > 3) {
+                leftEye.scale = vec2(1, 0.1);
+                rightEye.scale = vec2(1, 0.1);
+                if (player.blinkTimer > 3.2) {
+                    leftEye.scale = vec2(1, 1);
+                    rightEye.scale = vec2(1, 1);
+                    player.blinkTimer = 0;
+                }
+            }
+
+            // Animate coins
+            get("coin").forEach(coin => {
+                coin.bobTime += dt();
+                coin.pos.y += Math.sin(coin.bobTime * 3) * 0.5;
+                coin.angle += coin.rotationSpeed * dt();
+            });
+
+            // Enhanced monster AI and animations
+            monsters.forEach(monster => {
+                if (!monster.exists()) return;
+                
+                monster.animTime += dt();
+                
+                // Patrol movement
+                monster.pos.x += monster.direction * monster.speed * dt();
+                
+                // Update monster parts
+                monster.spikes.forEach((spike, i) => {
+                    spike.pos.x = monster.pos.x + (i === 0 ? 4 : 12);
+                    spike.pos.y = monster.pos.y;
+                });
+                
+                monster.eyes.forEach((eye, i) => {
+                    eye.pos.x = monster.pos.x + (i === 0 ? 6 : 16);
+                    eye.pos.y = monster.pos.y + 8;
+                    // Glowing eyes effect
+                    eye.color = rgb(255, Math.sin(monster.animTime * 6) * 127 + 128, 0);
+                });
+                
+                // Bounce at patrol boundaries
+                if (monster.pos.x <= monster.patrolLeft || monster.pos.x >= monster.patrolRight) {
+                    monster.direction *= -1;
+                }
+                
+                // Color pulsing animation
+                const pulse = Math.sin(monster.animTime * 4) * 0.3 + 0.7;
+                monster.color = rgb(
+                    MONSTER_COLOR[0] * pulse,
+                    MONSTER_COLOR[1] * pulse,
+                    MONSTER_COLOR[2] * pulse
+                );
+            });
+
+            // Enhanced player animations
+            player.animationTime += dt();
+            
+            // Player movement animation
+            if (player.vel.x > 0) {
+                player.facingRight = true;
+            } else if (player.vel.x < 0) {
+                player.facingRight = false;
+            }
+            
+            // Enhanced player animation when moving
+            if (Math.abs(player.vel.x) > 0 && grounded) {
+                player.angle = Math.sin(player.animationTime * 8) * 0.1;
+                leftFoot.pos.y = player.pos.y + 28 + Math.sin(player.animationTime * 10) * 2;
+                rightFoot.pos.y = player.pos.y + 28 + Math.sin(player.animationTime * 10 + Math.PI) * 2;
+            } else {
+                player.angle = 0;
+            }
+        });
+
+        // Platform collision system
+        player.onUpdate(() => {
+            if (gameOver) return;
+            
+            // Check platform collisions manually for better control
+            grounded = false;
+            
+            get("platform").forEach((platform) => {
+                // Get platform bounds
+                const platLeft = platform.pos.x;
+                const platRight = platform.pos.x + platform.width;
+                const platTop = platform.pos.y;
+                const platBottom = platform.pos.y + platform.height;
+                
+                // Get player bounds
+                const playerLeft = player.pos.x;
+                const playerRight = player.pos.x + 28;
+                const playerTop = player.pos.y;
+                const playerBottom = player.pos.y + 28;
+                
+                // Check if player is overlapping with platform
+                if (playerRight > platLeft && playerLeft < platRight && 
+                    playerBottom > platTop && playerTop < platBottom) {
+                    
+                    // Player is inside platform - determine which side to push out
+                    const overlapLeft = playerRight - platLeft;
+                    const overlapRight = platRight - playerLeft;
+                    const overlapTop = playerBottom - platTop;
+                    const overlapBottom = platBottom - playerTop;
+                    
+                    // Find smallest overlap to determine collision side
+                    const minOverlap = Math.min(overlapLeft, overlapRight, overlapTop, overlapBottom);
+                    
+                    if (minOverlap === overlapTop && player.vel.y > 0) {
+                        // Landing on top of platform
+                        player.pos.y = platTop - 28;
+                        player.vel.y = 0;
+                        grounded = true;
+                    } else if (minOverlap === overlapBottom && player.vel.y < 0) {
+                        // Hitting platform from below
+                        player.pos.y = platBottom;
+                        player.vel.y = 0;
+                    } else if (minOverlap === overlapLeft && player.vel.x > 0) {
+                        // Hitting platform from left
+                        player.pos.x = platLeft - 28;
+                        player.vel.x = 0;
+                    } else if (minOverlap === overlapRight && player.vel.x < 0) {
+                        // Hitting platform from right
+                        player.pos.x = platRight;
+                        player.vel.x = 0;
+                    }
+                }
+            });
+
+            // Camera follows player horizontally
+            camPos(player.pos.x, 300);
+
+            // Reset player if they fall off screen
+            if (player.pos.y > 700) {
+                playerDeath();
+            }
+
+            // Enhanced visual feedback
+            if (grounded) {
+                player.color = rgb(...PLAYER_COLOR);
+            } else {
+                player.color = rgb(200, 80, 80);
+            }
+        });
+    </script>
+</body>
+</html>
