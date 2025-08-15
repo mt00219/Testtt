@@ -80,8 +80,12 @@
         let player, playerFace, leftEye, rightEye, leftPupil, rightPupil, leftFoot, rightFoot;
         let monsters = [];
         let levelText, coinText, livesText;
-        let dialogueBox, dialogueText, dialogueStep = 0;
-        let showingDialogue = false;
+        let dialogueBox, dialogueText, dialogueBackdrop, dialogueBoxGlow, continueIndicator;
+        let dialogueStep = 0, showingDialogue = false;
+        
+        // Typewriter effect variables
+        let currentDialogueText = "", targetDialogueText = "";
+        let typewriterTime = 0, typewriterSpeed = 0.03;
 
         // Level definitions - All platforms now reachable
         const levelData = {
@@ -349,39 +353,285 @@
             }
         }
 
-        // Dialogue system
+        // Enhanced coin collection effects
+        function createCoinCollectionEffects(x, y) {
+            // Scale pop effect
+            const popEffect = add([
+                circle(8),
+                color(255, 255, 0),
+                outline(2, [255, 200, 0]),
+                pos(x, y),
+                scale(1),
+                lifespan(0.3),
+                "coinPopEffect"
+            ]);
+            
+            popEffect.animTime = 0;
+            popEffect.onUpdate(() => {
+                popEffect.animTime += dt();
+                const scale = 1 + Math.sin(popEffect.animTime * 15) * 0.5;
+                popEffect.scale = vec2(scale, scale);
+            });
+            
+            // Ripple effect
+            for (let i = 0; i < 3; i++) {
+                const ripple = add([
+                    circle(5 + i * 8),
+                    color(255, 255, 100),
+                    opacity(0.6 - i * 0.2),
+                    pos(x, y),
+                    lifespan(0.6 + i * 0.2),
+                    "coinRippleEffect"
+                ]);
+                
+                ripple.animTime = 0;
+                ripple.baseOpacity = 0.6 - i * 0.2;
+                ripple.onUpdate(() => {
+                    ripple.animTime += dt();
+                    const progress = ripple.animTime / ripple.lifespan;
+                    const scale = 1 + ripple.animTime * 2;
+                    ripple.scale = vec2(scale, scale);
+                    ripple.opacity = ripple.baseOpacity * (1 - progress);
+                });
+            }
+            
+            // Enhanced particles
+            createCoinParticles(x, y);
+            
+            // Floating +1 text
+            const floatingText = add([
+                text("+1", { size: 20 }),
+                pos(x, y),
+                color(255, 255, 0),
+                lifespan(1),
+                move(UP, 50),
+                "collectEffect"
+            ]);
+            
+            floatingText.animTime = 0;
+            floatingText.onUpdate(() => {
+                floatingText.animTime += dt();
+                const scale = 1 + Math.sin(floatingText.animTime * 8) * 0.1;
+                floatingText.scale = vec2(scale, scale);
+            });
+        }
+
+        // Animate coin counter in HUD
+        function animateCoinCounter(oldValue, newValue) {
+            if (!coinText) return;
+            
+            let animationTime = 0;
+            const duration = 0.2; // 200ms
+            
+            const counterAnimation = add([
+                text("", { size: 20 }),
+                pos(-1000, -1000), // Hidden
+                "counterAnimation"
+            ]);
+            
+            counterAnimation.onUpdate(() => {
+                animationTime += dt();
+                const progress = Math.min(animationTime / duration, 1);
+                
+                // Eased animation
+                const easedProgress = 1 - Math.pow(1 - progress, 3); // Ease out cubic
+                const currentValue = Math.floor(oldValue + (newValue - oldValue) * easedProgress);
+                
+                // Update display
+                coinText.text = `Coins: ${currentValue}/${totalCoins}`;
+                
+                // Scale effect
+                const scaleBoost = Math.sin(progress * Math.PI) * 0.2;
+                coinText.scale = vec2(1 + scaleBoost, 1 + scaleBoost);
+                
+                // Cleanup when done
+                if (progress >= 1) {
+                    coinText.text = `Coins: ${newValue}/${totalCoins}`;
+                    coinText.scale = vec2(1, 1);
+                    counterAnimation.destroy();
+                }
+            });
+        }
+
+        // Simple Parallax Background System
+        const ParallaxBackground = {
+            layers: [],
+            
+            // Initialize parallax layers for theme
+            init(theme) {
+                this.destroy();
+                this.layers = [];
+                
+                // Layer 1: Far background (0.2× speed)
+                this.createLayer(0, 0.2, this.getLayerColor(theme, 0));
+                
+                // Layer 2: Mid background (0.5× speed)  
+                this.createLayer(1, 0.5, this.getLayerColor(theme, 1));
+                
+                // Layer 3: Near background (0.8× speed)
+                this.createLayer(2, 0.8, this.getLayerColor(theme, 2));
+            },
+            
+            // Create a single parallax layer
+            createLayer(index, speed, layerColor) {
+                // Create 3 segments for seamless scrolling
+                for (let i = 0; i < 3; i++) {
+                    const layer = add([
+                        rect(width(), height()),
+                        color(...layerColor),
+                        opacity(0.3 + index * 0.15),
+                        pos(i * width(), 0),
+                        z(-20 + index), // Behind all gameplay elements
+                        "parallaxLayer"
+                    ]);
+                    
+                    layer.parallaxSpeed = speed;
+                    layer.baseX = i * width();
+                    this.layers.push(layer);
+                }
+                
+                // Add simple decorations
+                this.addDecorations(index, speed, layerColor);
+            },
+            
+            // Add simple theme decorations
+            addDecorations(layerIndex, speed, layerColor) {
+                const decorCount = 4 - layerIndex;
+                
+                for (let i = 0; i < decorCount; i++) {
+                    for (let seg = 0; seg < 3; seg++) {
+                        const x = (i + 1) * width() / (decorCount + 1) + seg * width();
+                        const y = height() * 0.7 + layerIndex * 30;
+                        
+                        const decor = add([
+                            rect(8 + layerIndex * 4, 20 + layerIndex * 10),
+                            color(...layerColor.map(c => Math.min(255, c + 30))),
+                            opacity(0.5 + layerIndex * 0.2),
+                            pos(x, y),
+                            z(-20 + layerIndex),
+                            "parallaxDecor"
+                        ]);
+                        
+                        decor.parallaxSpeed = speed;
+                        decor.baseX = x;
+                        this.layers.push(decor);
+                    }
+                }
+            },
+            
+            // Get theme-appropriate colors for each layer
+            getLayerColor(theme, layerIndex) {
+                if (!theme || !theme.skyColor) return [[100, 150, 200], [120, 170, 220], [140, 190, 240]][layerIndex];
+                
+                const sky = theme.skyColor;
+                const multipliers = [0.6, 0.75, 0.9]; // Far to near
+                
+                return sky.map(c => Math.max(20, Math.min(255, c * multipliers[layerIndex])));
+            },
+            
+            // Update positions based on camera
+            update(camPos) {
+                this.layers.forEach(layer => {
+                    if (layer.exists()) {
+                        const offset = camPos.x * layer.parallaxSpeed;
+                        layer.pos.x = layer.baseX - offset;
+                        
+                        // Wrap around for seamless scrolling
+                        if (layer.pos.x < -width()) {
+                            layer.pos.x += width() * 3;
+                            layer.baseX += width() * 3;
+                        } else if (layer.pos.x > width() * 2) {
+                            layer.pos.x -= width() * 3;
+                            layer.baseX -= width() * 3;
+                        }
+                    }
+                });
+            },
+            
+            // Clean up all layers
+            destroy() {
+                destroyAll("parallaxLayer");
+                destroyAll("parallaxDecor");
+                this.layers = [];
+            }
+        };
+
+        // Enhanced Responsive Dialogue System
         function showDialogue(levelNum) {
             const dialogue = levelData[levelNum].dialogue;
             showingDialogue = true;
             dialogueStep = 0;
             
-            // Create dialogue box background - manually centered
-            const boxWidth = 500;  // Smaller width
-            const boxHeight = 120;
-            // Manual centering calculation for 800x600 canvas
-            const centerX = 150;  // (800 - 500) / 2 = 150
-            const centerY = 240;  // (600 - 120) / 2 = 240
+            // Responsive sizing based on engine dimensions
+            const engineWidth = width();
+            const engineHeight = height();
+            const boxWidth = Math.min(600, engineWidth * 0.8);  // 80% of screen or max 600px
+            const boxHeight = Math.min(150, engineHeight * 0.25); // 25% of screen or max 150px
+            const centerX = (engineWidth - boxWidth) / 2;
+            const centerY = (engineHeight - boxHeight) / 2;
             
+            // Create dark backdrop layer
+            dialogueBackdrop = add([
+                rect(engineWidth, engineHeight),
+                color(0, 0, 0),
+                opacity(0.6),
+                pos(0, 0),
+                fixed(),
+                z(100), // High z-index to be above everything
+                "dialogueBackdrop"
+            ]);
+            
+            // Create dialogue box background
             dialogueBox = add([
                 rect(boxWidth, boxHeight),
-                color(0, 0, 0),
-                opacity(0.8),
+                color(20, 20, 30),
+                opacity(0.95),
                 pos(centerX, centerY),
-                outline(2, [255, 255, 255]),
-                fixed(), // Make it fixed so it doesn't move with camera
+                outline(3, [100, 150, 255]),
+                fixed(),
+                z(101), // Above backdrop
                 "dialogueBox"
             ]);
             
-            // Create dialogue text - centered inside the box
+            // Add box glow effect
+            dialogueBoxGlow = add([
+                rect(boxWidth + 10, boxHeight + 10),
+                color(100, 150, 255),
+                opacity(0.3),
+                pos(centerX - 5, centerY - 5),
+                fixed(),
+                z(100.5), // Between backdrop and box
+                "dialogueBoxGlow"
+            ]);
+            
+            // Create dialogue text
             dialogueText = add([
-                text("", { size: 16, width: boxWidth - 40 }),
-                pos(centerX + 20, centerY + 20),
+                text("", { size: Math.max(14, Math.min(18, boxWidth / 30)), width: boxWidth - 60 }),
+                pos(centerX + 30, centerY + 25),
                 color(255, 255, 255),
-                fixed(), // Make it fixed so it doesn't move with camera
+                fixed(),
+                z(102), // Above box
                 "dialogueText"
             ]);
             
-            // Show first dialogue
+            // Create continue indicator
+            continueIndicator = add([
+                text("Press SPACE to continue...", { size: Math.max(12, Math.min(16, boxWidth / 35)) }),
+                pos(centerX + boxWidth - 200, centerY + boxHeight - 25),
+                color(150, 200, 255),
+                opacity(1),
+                fixed(),
+                z(102),
+                "continueIndicator"
+            ]);
+            
+            // Initialize typewriter variables
+            currentDialogueText = "";
+            targetDialogueText = "";
+            typewriterTime = 0;
+            typewriterSpeed = 0.03; // Characters per frame at 60fps
+            
+            // Start typewriter effect
             updateDialogue(dialogue);
         }
         
@@ -394,13 +644,18 @@
             ];
             
             if (dialogueStep < lines.length) {
-                dialogueText.text = lines[dialogueStep];
+                // Set target text for typewriter effect
+                targetDialogueText = lines[dialogueStep];
+                currentDialogueText = "";
+                typewriterTime = 0;
                 
-                // Add continue instruction
-                if (dialogueStep < lines.length - 1) {
-                    dialogueText.text += "\n\n[Press SPACE to continue...]";
-                } else {
-                    dialogueText.text += "\n\n[Press SPACE to start level!]";
+                // Update continue indicator text
+                if (continueIndicator) {
+                    if (dialogueStep < lines.length - 1) {
+                        continueIndicator.text = "Press SPACE to continue...";
+                    } else {
+                        continueIndicator.text = "Press SPACE to start level!";
+                    }
                 }
             }
         }
@@ -409,6 +664,15 @@
             showingDialogue = false;
             dialogueStep = 0;
             
+            // Clean up all dialogue elements
+            if (dialogueBackdrop) {
+                dialogueBackdrop.destroy();
+                dialogueBackdrop = null;
+            }
+            if (dialogueBoxGlow) {
+                dialogueBoxGlow.destroy();
+                dialogueBoxGlow = null;
+            }
             if (dialogueBox) {
                 dialogueBox.destroy();
                 dialogueBox = null;
@@ -416,6 +680,50 @@
             if (dialogueText) {
                 dialogueText.destroy();
                 dialogueText = null;
+            }
+            if (continueIndicator) {
+                continueIndicator.destroy();
+                continueIndicator = null;
+            }
+            
+            // Reset typewriter variables
+            currentDialogueText = "";
+            targetDialogueText = "";
+            typewriterTime = 0;
+        }
+
+        // Update dialogue animations (typewriter effect and pulsing indicator)
+        function updateDialogueAnimations() {
+            if (!showingDialogue) return;
+            
+            // Typewriter effect
+            if (dialogueText && targetDialogueText && currentDialogueText.length < targetDialogueText.length) {
+                typewriterTime += dt();
+                if (typewriterTime >= typewriterSpeed) {
+                    currentDialogueText += targetDialogueText[currentDialogueText.length];
+                    dialogueText.text = currentDialogueText;
+                    typewriterTime = 0;
+                }
+            }
+            
+            // Pulsing continue indicator
+            if (continueIndicator) {
+                const pulseSpeed = 3;
+                const minOpacity = 0.4;
+                const maxOpacity = 1.0;
+                const opacity = minOpacity + (maxOpacity - minOpacity) * (Math.sin(time() * pulseSpeed) * 0.5 + 0.5);
+                continueIndicator.opacity = opacity;
+                
+                // Only show indicator when typewriter is done
+                if (currentDialogueText.length < targetDialogueText.length) {
+                    continueIndicator.opacity = 0;
+                }
+            }
+            
+            // Subtle glow animation on dialogue box
+            if (dialogueBoxGlow) {
+                const glowPulse = Math.sin(time() * 2) * 0.1 + 0.3;
+                dialogueBoxGlow.opacity = glowPulse;
             }
         }
 
@@ -458,10 +766,15 @@
         // Initialize level
         function initLevel(levelNum) {
             // Clear existing objects
+            ParallaxBackground.destroy();
             destroyAll("platform");
             destroyAll("coin");
             destroyAll("coinGlow");
             destroyAll("coinSparkle");
+            destroyAll("coinShimmer");
+            destroyAll("coinPopEffect");
+            destroyAll("coinRippleEffect");
+            destroyAll("counterAnimation");
             destroyAll("monster");
             destroyAll("monsterSpike");
             destroyAll("monsterEye");
@@ -473,6 +786,9 @@
             destroyAll("star");
             destroyAll("dialogueBox");
             destroyAll("dialogueText");
+            destroyAll("dialogueBackdrop");
+            destroyAll("dialogueBoxGlow");
+            destroyAll("continueIndicator");
 
             const level = levelData[levelNum];
             coinsCollected = 0;
@@ -527,18 +843,9 @@
                 }
             });
 
-            // Create coins
+            // Create enhanced coins
             level.coins.forEach(coinPos => {
-                // Outer glow
-                add([
-                    circle(15),
-                    color(255, 255, 100),
-                    opacity(0.2),
-                    pos(coinPos.x, coinPos.y),
-                    "coinGlow"
-                ]);
-                
-                // Themed main coin
+                // Main coin
                 const coin = add([
                     circle(8),
                     color(...level.theme.coinColor),
@@ -548,16 +855,42 @@
                     "coin"
                 ]);
                 
-                // Inner sparkle
-                add([
+                // Outer glow (parented to coin)
+                const glow = add([
+                    circle(15),
+                    color(255, 255, 100),
+                    opacity(0.2),
+                    pos(coinPos.x, coinPos.y),
+                    "coinGlow"
+                ]);
+                
+                // Inner sparkle (parented to coin)
+                const sparkle = add([
                     circle(4),
                     color(255, 255, 200),
                     pos(coinPos.x, coinPos.y),
                     "coinSparkle"
                 ]);
                 
+                // Shimmer effect (parented to coin)
+                const shimmer = add([
+                    rect(2, 16),
+                    color(255, 255, 255),
+                    opacity(0),
+                    pos(coinPos.x - 8, coinPos.y),
+                    "coinShimmer"
+                ]);
+                
+                // Parent glow and sparkle to coin for cleanup
+                coin.glow = glow;
+                coin.sparkle = sparkle;
+                coin.shimmer = shimmer;
+                
+                // Animation properties
                 coin.rotationSpeed = 2;
                 coin.bobTime = 0;
+                coin.shimmerTime = Math.random() * Math.PI * 2; // Random phase
+                coin.baseY = coinPos.y;
             });
 
             // Create monsters
@@ -642,6 +975,9 @@
             
             // Set themed background color
             canvas.style.backgroundColor = `rgb(${level.theme.skyColor.join(',')})`;
+            
+            // Initialize parallax background
+            ParallaxBackground.init(level.theme);
             
             // Reset player position
             if (player) {
@@ -860,31 +1196,24 @@
         function setupCollisionHandlers() {
             if (!player) return;
             
-            // Coin collection
+            // Enhanced coin collection
             player.onCollide("coin", (coin) => {
                 const coinPos = coin.pos.clone();
-                coin.destroy();
                 
-                // Remove glow and sparkle
-                get("coinGlow").forEach(glow => {
-                    if (glow.pos.dist(coinPos) < 5) glow.destroy();
-                });
-                get("coinSparkle").forEach(sparkle => {
-                    if (sparkle.pos.dist(coinPos) < 5) sparkle.destroy();
-                });
+                // Clean up parented elements
+                if (coin.glow && coin.glow.exists()) coin.glow.destroy();
+                if (coin.sparkle && coin.sparkle.exists()) coin.sparkle.destroy();
+                if (coin.shimmer && coin.shimmer.exists()) coin.shimmer.destroy();
                 
+                // Collection effects
+                createCoinCollectionEffects(coinPos.x, coinPos.y);
+                
+                // Update coin count with animation
+                const oldCount = coinsCollected;
                 coinsCollected++;
-                coinText.text = `Coins: ${coinsCollected}/${totalCoins}`;
+                animateCoinCounter(oldCount, coinsCollected);
                 
-                createCoinParticles(coinPos.x, coinPos.y);
-                add([
-                    text("+1", { size: 20 }),
-                    pos(coinPos.x, coinPos.y),
-                    color(255, 255, 0),
-                    lifespan(1),
-                    move(UP, 50),
-                    "collectEffect"
-                ]);
+                coin.destroy();
             });
 
             // Exit collision
@@ -1072,6 +1401,9 @@
 
                 // Camera follows player
             camPos(player.pos.x, 300);
+            
+            // Update parallax background
+            ParallaxBackground.update(vec2(player.pos.x, 300));
 
                 // Death by falling
                 if (player.pos.y > 700) {
@@ -1089,6 +1421,9 @@
 
         // Main game loop
         onUpdate(() => {
+            // Update dialogue animations even when game is paused
+            updateDialogueAnimations();
+            
             if (gameOver || !player) return;
 
             // Update debug info
@@ -1135,11 +1470,37 @@
                 star.opacity = 0.3 + Math.sin(star.twinkleTime * 2) * 0.4;
             });
 
-            // Animate coins
+            // Animate coins with shimmer
             get("coin").forEach(coin => {
                 coin.bobTime += dt();
-                coin.pos.y += Math.sin(coin.bobTime * 3) * 0.3;
+                coin.shimmerTime += dt();
+                
+                // Bob animation
+                const bobOffset = Math.sin(coin.bobTime * 3) * 0.3;
+                coin.pos.y = coin.baseY + bobOffset;
                 coin.angle += coin.rotationSpeed * dt();
+                
+                // Update parented elements
+                if (coin.glow && coin.glow.exists()) {
+                    coin.glow.pos = vec2(coin.pos.x, coin.pos.y);
+                }
+                if (coin.sparkle && coin.sparkle.exists()) {
+                    coin.sparkle.pos = vec2(coin.pos.x, coin.pos.y);
+                }
+                
+                // Shimmer sweep effect (every 3 seconds)
+                if (coin.shimmer && coin.shimmer.exists()) {
+                    const shimmerCycle = (coin.shimmerTime % 3) / 3; // 0 to 1 over 3 seconds
+                    
+                    if (shimmerCycle < 0.3) { // Shimmer sweep in first 30% of cycle
+                        const progress = shimmerCycle / 0.3; // 0 to 1 during sweep
+                        coin.shimmer.pos.x = coin.pos.x - 8 + (progress * 16); // Sweep across coin
+                        coin.shimmer.pos.y = coin.pos.y;
+                        coin.shimmer.opacity = Math.sin(progress * Math.PI) * 0.8; // Fade in and out
+                    } else {
+                        coin.shimmer.opacity = 0; // Hide shimmer between sweeps
+                    }
+                }
             });
 
             // Animate exit portal
