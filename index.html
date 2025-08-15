@@ -355,21 +355,29 @@
             showingDialogue = true;
             dialogueStep = 0;
             
-            // Create dialogue box background
+            // Create dialogue box background - manually centered
+            const boxWidth = 500;  // Smaller width
+            const boxHeight = 120;
+            // Manual centering calculation for 800x600 canvas
+            const centerX = 150;  // (800 - 500) / 2 = 150
+            const centerY = 240;  // (600 - 120) / 2 = 240
+            
             dialogueBox = add([
-                rect(width() - 40, 120),
+                rect(boxWidth, boxHeight),
                 color(0, 0, 0),
                 opacity(0.8),
-                pos(20, height() - 140),
+                pos(centerX, centerY),
                 outline(2, [255, 255, 255]),
+                fixed(), // Make it fixed so it doesn't move with camera
                 "dialogueBox"
             ]);
             
-            // Create dialogue text
+            // Create dialogue text - centered inside the box
             dialogueText = add([
-                text("", { size: 16, width: width() - 80 }),
-                pos(40, height() - 120),
+                text("", { size: 16, width: boxWidth - 40 }),
+                pos(centerX + 20, centerY + 20),
                 color(255, 255, 255),
+                fixed(), // Make it fixed so it doesn't move with camera
                 "dialogueText"
             ]);
             
