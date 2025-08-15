@@ -68,6 +68,7 @@
         let playerLives = 3;
         let gameOver = false;
         let levelComplete = false;
+        let levelWidth = 800; // World width for camera clamping
 
         // Movement variables
         const MOVE_SPEED = 200;
@@ -75,6 +76,14 @@
         let grounded = false;
         let moveLeft = false;
         let moveRight = false;
+        
+        // Platformer feel variables
+        let lastOnGround = 0;
+        let lastJumpPress = 0;
+        let isJumping = false; // Prevent multiple jumps from buffer
+        let jumpKeyHeld = false; // Track if jump key is currently held
+        const COYOTE_TIME = 0.12; // 120ms
+        const JUMP_BUFFER = 0.12; // 120ms
 
         // Game objects
         let player, playerFace, leftEye, rightEye, leftPupil, rightPupil, leftFoot, rightFoot;
@@ -617,7 +626,8 @@
             // Create continue indicator
             continueIndicator = add([
                 text("Press SPACE to continue...", { size: Math.max(12, Math.min(16, boxWidth / 35)) }),
-                pos(centerX + boxWidth - 200, centerY + boxHeight - 25),
+                pos(centerX + boxWidth - 18, centerY + boxHeight - 14),
+                anchor("botright"),
                 color(150, 200, 255),
                 opacity(1),
                 fixed(),
@@ -973,9 +983,6 @@
             if (coinText) coinText.text = `Coins: ${coinsCollected}/${totalCoins}`;
             if (livesText) livesText.text = `Lives: ${playerLives}`;
             
-            // Set themed background color
-            canvas.style.backgroundColor = `rgb(${level.theme.skyColor.join(',')})`;
-            
             // Initialize parallax background
             ParallaxBackground.init(level.theme);
             
@@ -1143,16 +1150,27 @@
             }
         });
 
-        // Jump controls
-        onKeyPress("w", () => {
-            if (player && grounded) {
-                player.vel.y = -JUMP_FORCE;
-                grounded = false;
-                createJumpParticles(player.pos.x + 14, player.pos.y + 28);
+        // Jump controls with key state tracking
+        onKeyDown("w", () => {
+            if (showingDialogue) return;
+            if (!jumpKeyHeld) {
+                jumpKeyHeld = true;
+                lastJumpPress = time();
+                console.log("W key down - jump buffer set");
             }
         });
 
-        onKeyPress("space", () => {
+        onKeyRelease("w", () => {
+            jumpKeyHeld = false;
+            console.log("W key released - checking for short hop");
+            if (player && player.vel.y < 0) {
+                console.log("SHORT HOP! Velocity before:", player.vel.y);
+                player.vel.y *= 0.5;
+                console.log("Velocity after:", player.vel.y);
+            }
+        });
+
+        onKeyDown("space", () => {
             // Handle dialogue progression
             if (showingDialogue) {
                 const dialogue = levelData[currentLevel].dialogue;
@@ -1166,11 +1184,21 @@
                 return;
             }
             
-            // Normal jump
-            if (player && grounded) {
-                player.vel.y = -JUMP_FORCE;
-                grounded = false;
-                createJumpParticles(player.pos.x + 14, player.pos.y + 28);
+            if (!jumpKeyHeld) {
+                jumpKeyHeld = true;
+                lastJumpPress = time();
+                console.log("Space key down - jump buffer set");
+            }
+        });
+
+        onKeyRelease("space", () => {
+            if (showingDialogue) return;
+            jumpKeyHeld = false;
+            console.log("Space key released - checking for short hop");
+            if (player && player.vel.y < 0) {
+                console.log("SHORT HOP! Velocity before:", player.vel.y);
+                player.vel.y *= 0.5;
+                console.log("Velocity after:", player.vel.y);
             }
         });
 
@@ -1361,6 +1389,21 @@
                 // Platform collision detection
                 grounded = false;
                 
+                // Jump buffer and coyote time logic
+                const canCoyoteJump = time() - lastOnGround < COYOTE_TIME;
+                const hasJumpBuffer = time() - lastJumpPress < JUMP_BUFFER;
+                
+                if (hasJumpBuffer && (grounded || canCoyoteJump) && player.vel.y >= 0 && !isJumping) {
+                    // Perform jump
+                    player.vel.y = -JUMP_FORCE;
+                    isJumping = true; // Mark as jumping to prevent re-jumping
+                    console.log("Jump executed with buffer! Force:", -JUMP_FORCE);
+                    createJumpParticles(player.pos.x + 14, player.pos.y + 28);
+                    // Clear jump buffer
+                    lastJumpPress = 0;
+                    lastOnGround = 0;
+                }
+                
                 get("platform").forEach((platform) => {
                     const platLeft = platform.pos.x;
                     const platRight = platform.pos.x + platform.width;
@@ -1386,6 +1429,8 @@
                             player.pos.y = platTop - 28;
                             player.vel.y = 0;
                             grounded = true;
+                            lastOnGround = time(); // Update coyote time
+                            isJumping = false; // Reset jumping flag when landing
                         } else if (minOverlap === overlapBottom && player.vel.y < 0) {
                             player.pos.y = platBottom;
                             player.vel.y = 0;
@@ -1399,8 +1444,8 @@
                     }
                 });
 
-                // Camera follows player
-            camPos(player.pos.x, 300);
+                // Camera follows player with world bounds clamping
+                camPos(vec2(clamp(player.pos.x, width()/2, levelWidth - width()/2), 300));
             
             // Update parallax background
             ParallaxBackground.update(vec2(player.pos.x, 300));
