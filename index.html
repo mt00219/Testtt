@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kaboom.js Platform Game</title>
+    <title>Multi-Level Kaboom Platform Game</title>
     <style>
         body {
             margin: 0;
@@ -36,9 +36,10 @@
         <p><strong>Controls:</strong></p>
         <p>A/D or Arrow Keys: Move left/right</p>
         <p>W or Space: Jump</p>
-        <p><strong>Goal:</strong> Collect all yellow coins to win!</p>
-        <p><strong>Danger:</strong> Avoid purple monsters (3 lives)</p>
-        <p><strong>NEW:</strong> Enhanced visuals & particle effects!</p>
+        <p><strong>Goal:</strong> Collect all coins and reach the exit!</p>
+        <p><strong>Danger:</strong> Avoid monsters OR jump on them to destroy!</p>
+        <p><strong>Lives:</strong> 3 lives per level (reset each level)</p>
+        <p><strong>Levels:</strong> 5 progressively harder levels!</p>
     </div>
     
     <script src="https://unpkg.com/kaboom@3000/dist/kaboom.js"></script>
@@ -53,186 +54,247 @@
         // Set gravity
         setGravity(1600);
 
-        // Define colors for our squares
+        // Define colors
         const PLAYER_COLOR = [255, 100, 100]; // Red
         const PLATFORM_COLOR = [100, 255, 100]; // Green
         const GROUND_COLOR = [139, 69, 19]; // Brown
         const MONSTER_COLOR = [150, 50, 200]; // Purple
 
-        // Create animated player with enhanced visuals
-        const player = add([
-            rect(28, 28),
-            outline(2, [255, 255, 255]), // White outline
-            color(...PLAYER_COLOR),
-            pos(100, 300),
-            area(),
-            body(),
-            "player"
-        ]);
+        // Game state variables
+        let currentLevel = 1;
+        let maxLevel = 5;
+        let coinsCollected = 0;
+        let totalCoins = 0;
+        let playerLives = 3;
+        let gameOver = false;
+        let levelComplete = false;
 
-        // Add custom properties to player
-        player.animationTime = 0;
-        player.facingRight = true;
-        player.blinkTimer = 0;
-
-        // Enhanced Player Character Parts
-        // Player's face
-        const playerFace = add([
-            circle(10),
-            color(255, 150, 150),
-            pos(player.pos.x + 14, player.pos.y + 10),
-            "playerFace"
-        ]);
-
-        // Player's eyes
-        const leftEye = add([
-            circle(3),
-            color(255, 255, 255),
-            pos(player.pos.x + 9, player.pos.y + 8),
-            "playerEye"
-        ]);
-
-        const rightEye = add([
-            circle(3),
-            color(255, 255, 255),
-            pos(player.pos.x + 19, player.pos.y + 8),
-            "playerEye"
-        ]);
-
-        // Eye pupils
-        const leftPupil = add([
-            circle(1.5),
-            color(0, 0, 0),
-            pos(player.pos.x + 9, player.pos.y + 8),
-            "playerPupil"
-        ]);
-
-        const rightPupil = add([
-            circle(1.5),
-            color(0, 0, 0),
-            pos(player.pos.x + 19, player.pos.y + 8),
-            "playerPupil"
-        ]);
-
-        // Player's feet
-        const leftFoot = add([
-            rect(6, 4),
-            color(150, 50, 50),
-            pos(player.pos.x + 3, player.pos.y + 28),
-            "playerFoot"
-        ]);
-
-        const rightFoot = add([
-            rect(6, 4),
-            color(150, 50, 50),
-            pos(player.pos.x + 19, player.pos.y + 28),
-            "playerFoot"
-        ]);
-
-        // Enhanced ground platform
-        add([
-            rect(800, 60),
-            color(...GROUND_COLOR),
-            outline(2, [0, 0, 0]),
-            pos(0, 540),
-            area(),
-            "platform"
-        ]);
-
-        // Optimized platforms - all within jumping reach (max ~110px vertical gap)
-        const platforms = [
-            { x: 200, y: 460, width: 150, height: 20 },   // Platform 1 - easier reach from ground
-            { x: 400, y: 380, width: 120, height: 20 },   // Platform 2 - 80px gap from platform 1
-            { x: 580, y: 310, width: 120, height: 20 },   // Platform 3 - 70px gap, closer horizontally
-            { x: 320, y: 240, width: 140, height: 20 },   // Platform 4 - 70px gap, overlaps with platform 3
-            { x: 120, y: 170, width: 130, height: 20 },   // Platform 5 - 70px gap, wider for easier landing
-            { x: 480, y: 100, width: 160, height: 20 },   // Platform 6 - 70px gap, wider and closer
-            { x: 80, y: 60, width: 120, height: 20 },     // Platform 7 - 40px gap, easier jump
-            { x: 650, y: 200, width: 100, height: 20 },   // Platform 8 - accessible from platform 6
-        ];
-
-        // Create enhanced platform objects
-        platforms.forEach((platform, index) => {
-            add([
-                rect(platform.width, platform.height),
-                color(...PLATFORM_COLOR),
-                outline(1, [0, 100, 0]),
-                pos(platform.x, platform.y),
-                area(),
-                "platform"
-            ]);
-            
-            // Add decorative elements on some platforms
-            if (index % 2 === 0) {
-                add([
-                    rect(4, 8),
-                    color(0, 150, 0),
-                    pos(platform.x + platform.width/2, platform.y - 8),
-                    "decoration"
-                ]);
-            }
-        });
-
-        // Add background stars for visual appeal
-        for (let i = 0; i < 20; i++) {
-            add([
-                circle(1 + Math.random() * 2),
-                color(255, 255, 255),
-                pos(Math.random() * 800, Math.random() * 400),
-                opacity(0.7),
-                "star"
-            ]);
-        }
-
-        // Player movement variables
+        // Movement variables
         const MOVE_SPEED = 200;
         const JUMP_FORCE = 600;
-
-        // Track if player is on ground
         let grounded = false;
+        let moveLeft = false;
+        let moveRight = false;
 
-        // Movement controls
-        onKeyDown("a", () => {
-            player.vel.x = -MOVE_SPEED;
-        });
+        // Game objects
+        let player, playerFace, leftEye, rightEye, leftPupil, rightPupil, leftFoot, rightFoot;
+        let monsters = [];
+        let levelText, coinText, livesText;
+        let dialogueBox, dialogueText, dialogueStep = 0;
+        let showingDialogue = false;
 
-        onKeyDown("left", () => {
-            player.vel.x = -MOVE_SPEED;
-        });
-
-        onKeyDown("d", () => {
-            player.vel.x = MOVE_SPEED;
-        });
-
-        onKeyDown("right", () => {
-            player.vel.x = MOVE_SPEED;
-        });
-
-        // Stop horizontal movement when keys are released
-        onKeyRelease(["a", "left"], () => {
-            player.vel.x = 0;
-        });
-
-        onKeyRelease(["d", "right"], () => {
-            player.vel.x = 0;
-        });
-
-        // Jump controls with particle effects
-        onKeyPress("w", () => {
-            if (grounded) {
-                player.vel.y = -JUMP_FORCE;
-                grounded = false;
-                createJumpParticles(player.pos.x + 14, player.pos.y + 28);
+        // Level definitions - All platforms now reachable
+        const levelData = {
+            1: {
+                name: "Easy Start",
+                theme: {
+                    name: "Sunny Meadow",
+                    skyColor: [135, 206, 235],        // Sky blue
+                    groundColor: [34, 139, 34],       // Forest green
+                    platformColor: [160, 82, 45],     // Saddle brown
+                    starColor: [255, 255, 224],       // Light yellow
+                    coinColor: [255, 215, 0],         // Gold
+                    description: "A peaceful meadow where our hero begins the journey"
+                },
+                dialogue: {
+                    player: "Hey there, purple guy! Mind if I pass through?",
+                    monster: "RAWR! Nobody passes without... wait, did you just call me 'purple guy'? I prefer 'Sir Spikealot'!",
+                    playerResponse: "Nice to meet you, Sir Spikealot! I'm just here for the shiny coins.",
+                    monsterResponse: "Coins?! Those are MY treasure! But... since you're polite, maybe we can share... JUST KIDDING! RAWR!"
+                },
+                platforms: [
+                    { x: 150, y: 480, width: 200, height: 20 },  // Starting platform
+                    { x: 320, y: 420, width: 180, height: 20 },  // Closer - easily reachable
+                    { x: 250, y: 350, width: 160, height: 20 },  // Overlaps with both platforms
+                ],
+                coins: [
+                    { x: 250, y: 450 },   // On platform 1
+                    { x: 410, y: 390 },   // On platform 2 (adjusted)
+                    { x: 330, y: 320 },   // On platform 3
+                ],
+                monsters: [
+                    { platform: 1, x: 370, y: 396 },  // Adjusted position
+                ],
+                exit: { x: 300, y: 300 }
+            },
+            2: {
+                name: "Getting Higher",
+                theme: {
+                    name: "Desert Oasis",
+                    skyColor: [255, 165, 0],          // Orange
+                    groundColor: [238, 203, 173],     // Sandy brown
+                    platformColor: [205, 133, 63],    // Peru brown
+                    starColor: [255, 255, 255],       // White stars
+                    coinColor: [255, 140, 0],         // Dark orange
+                    description: "A scorching desert with ancient stone platforms"
+                },
+                dialogue: {
+                    player: "Whew! It's hot here! You must be the local desert monster?",
+                    monster: "I am Sandstorm Steve! And you're trespassing on my dunes!",
+                    playerResponse: "Sorry Steve! I'm just passing through. Love what you've done with the place!",
+                    monsterResponse: "Well... thank you! Nobody ever compliments my interior decorating. But I still can't let you pass! SANDY RAWR!"
+                },
+                platforms: [
+                    { x: 100, y: 480, width: 150, height: 20 },   // Starting platform
+                    { x: 280, y: 420, width: 140, height: 20 },   // Closer jump from start
+                    { x: 180, y: 350, width: 140, height: 20 },   // Accessible from platform 2
+                    { x: 380, y: 280, width: 120, height: 20 },   // Reachable from platform 3
+                    { x: 250, y: 200, width: 120, height: 20 },   // Reachable from platform 4
+                ],
+                coins: [
+                    { x: 175, y: 450 },
+                    { x: 350, y: 390 },
+                    { x: 250, y: 320 },
+                    { x: 440, y: 250 },
+                    { x: 310, y: 170 },
+                ],
+                monsters: [
+                    { platform: 1, x: 310, y: 396 },
+                    { platform: 3, x: 410, y: 256 },
+                ],
+                exit: { x: 300, y: 150 }
+            },
+            3: {
+                name: "Jumping Challenge",
+                theme: {
+                    name: "Mystic Forest",
+                    skyColor: [25, 25, 112],          // Midnight blue
+                    groundColor: [0, 100, 0],         // Dark green
+                    platformColor: [139, 69, 19],     // Dark brown
+                    starColor: [173, 216, 230],       // Light blue
+                    coinColor: [50, 205, 50],         // Lime green
+                    description: "An enchanted forest with glowing magical coins"
+                },
+                dialogue: {
+                    player: "Wow, this forest is magical! You must be the forest guardian?",
+                    monster: "Indeed! I am Twigsworth the Mighty! Protector of these sacred trees!",
+                    playerResponse: "Nice to meet you Twigsworth! The glowing coins here are beautiful!",
+                    monsterResponse: "Those coins contain forest magic! Wait... you seem nice enough. Want to hear my poetry? No? Well, PREPARE FOR BATTLE anyway!"
+                },
+                platforms: [
+                    { x: 80, y: 500, width: 120, height: 20 },    // Starting platform
+                    { x: 220, y: 440, width: 120, height: 20 },   // Reachable from start
+                    { x: 380, y: 380, width: 100, height: 20 },   // Reachable from platform 2
+                    { x: 520, y: 320, width: 120, height: 20 },   // Reachable from platform 3
+                    { x: 350, y: 260, width: 140, height: 20 },   // Reachable from platform 4
+                    { x: 180, y: 200, width: 120, height: 20 },   // Reachable from platform 5
+                    { x: 450, y: 140, width: 140, height: 20 },   // Reachable from platform 6
+                ],
+                coins: [
+                    { x: 140, y: 470 },
+                    { x: 280, y: 410 },
+                    { x: 430, y: 350 },
+                    { x: 580, y: 290 },
+                    { x: 420, y: 230 },
+                    { x: 240, y: 170 },
+                ],
+                monsters: [
+                    { platform: 1, x: 250, y: 416 },
+                    { platform: 3, x: 550, y: 296 },
+                    { platform: 4, x: 400, y: 236 },
+                ],
+                exit: { x: 520, y: 110 }
+            },
+            4: {
+                name: "Monster Mayhem",
+                theme: {
+                    name: "Volcanic Lair",
+                    skyColor: [139, 0, 0],            // Dark red
+                    groundColor: [128, 0, 0],         // Maroon
+                    platformColor: [105, 105, 105],   // Dim gray
+                    starColor: [255, 69, 0],          // Red orange
+                    coinColor: [255, 0, 255],         // Magenta
+                    description: "A dangerous volcanic cavern with molten lava pools"
+                },
+                dialogue: {
+                    player: "Is it getting hot in here, or is it just the lava? Oh hi there, Mr. Monster!",
+                    monster: "MWAHAHAHA! I am Blazefang the Terrible! Welcome to my VOLCANIC DOOM CHAMBER!",
+                    playerResponse: "Volcanic Doom Chamber? That's... actually pretty cool! Do you have air conditioning?",
+                    monsterResponse: "Air conditioning?! I... well... no, but I have excellent WiFi! Wait, why am I telling you this? LAVA RAWR!"
+                },
+                platforms: [
+                    { x: 100, y: 500, width: 120, height: 20 },   // Starting platform
+                    { x: 260, y: 450, width: 100, height: 20 },   // Reachable from start
+                    { x: 420, y: 400, width: 120, height: 20 },   // Reachable from platform 2
+                    { x: 200, y: 350, width: 110, height: 20 },   // Reachable from platform 2 (lowered)
+                    { x: 350, y: 290, width: 100, height: 20 },   // Reachable from platform 4 (lowered & moved)
+                    { x: 150, y: 230, width: 120, height: 20 },   // Reachable from platform 4 (lowered)
+                    { x: 320, y: 170, width: 140, height: 20 },   // Reachable from platform 5 (lowered)
+                    { x: 480, y: 110, width: 120, height: 20 },   // Reachable from platform 7 (lowered)
+                ],
+                coins: [
+                    { x: 160, y: 470 },   // Platform 1
+                    { x: 310, y: 420 },   // Platform 2
+                    { x: 480, y: 370 },   // Platform 3
+                    { x: 255, y: 320 },   // Platform 4 (adjusted)
+                    { x: 400, y: 260 },   // Platform 5 (adjusted)
+                    { x: 200, y: 200 },   // Platform 6 (adjusted)
+                    { x: 380, y: 140 },   // Platform 7 (adjusted)
+                ],
+                monsters: [
+                    { platform: 1, x: 290, y: 426 },   // Platform 2
+                    { platform: 2, x: 460, y: 376 },   // Platform 3
+                    { platform: 3, x: 230, y: 326 },   // Platform 4 (adjusted)
+                    { platform: 4, x: 380, y: 266 },   // Platform 5 (adjusted)
+                    { platform: 5, x: 180, y: 206 },   // Platform 6 (adjusted)
+                    { platform: 6, x: 370, y: 146 },   // Platform 7 (adjusted)
+                ],
+                exit: { x: 520, y: 80 }   // Adjusted to match platform 8
+            },
+            5: {
+                name: "Master Challenge",
+                theme: {
+                    name: "Cyber Space",
+                    skyColor: [0, 0, 139],            // Dark blue
+                    groundColor: [72, 61, 139],       // Dark slate blue
+                    platformColor: [0, 255, 255],     // Cyan
+                    starColor: [0, 255, 0],           // Lime
+                    coinColor: [255, 255, 255],       // White
+                    description: "A futuristic digital realm with neon platforms"
+                },
+                dialogue: {
+                    player: "Whoa! This place looks like the inside of a computer! Are you a digital monster?",
+                    monster: "BEEP BOOP! I am Virus-Bot 3000! You have entered my CYBER DOMAIN!",
+                    playerResponse: "Virus-Bot 3000? That's so retro! Do you have any antivirus software?",
+                    monsterResponse: "Antivirus?! HOW DARE YOU! I am a PREMIUM virus! I cost $99.99! ERROR ERROR... DIGITAL RAWR!"
+                },
+                platforms: [
+                    { x: 70, y: 520, width: 100, height: 15 },   // Starting platform - wider
+                    { x: 200, y: 480, width: 90, height: 15 },   // Reachable from start
+                    { x: 320, y: 440, width: 90, height: 15 },   // Reachable from platform 2 (moved closer)
+                    { x: 450, y: 400, width: 90, height: 15 },   // Reachable from platform 3
+                    { x: 580, y: 360, width: 100, height: 15 },  // Reachable from platform 4
+                    { x: 430, y: 320, width: 90, height: 15 },   // Reachable from platform 5 (moved closer)
+                    { x: 280, y: 280, width: 90, height: 15 },   // Reachable from platform 6 (moved closer)
+                    { x: 130, y: 240, width: 90, height: 15 },   // Reachable from platform 7 (wider)
+                    { x: 350, y: 200, width: 100, height: 15 },  // Reachable from platform 8 (moved closer)
+                    { x: 500, y: 160, width: 90, height: 15 },   // Reachable from platform 9 (moved closer)
+                    { x: 320, y: 120, width: 120, height: 15 },  // Final platform - moved closer
+                ],
+                coins: [
+                    { x: 120, y: 490 },   // Platform 1
+                    { x: 245, y: 450 },   // Platform 2
+                    { x: 365, y: 410 },   // Platform 3 (adjusted)
+                    { x: 495, y: 370 },   // Platform 4
+                    { x: 630, y: 330 },   // Platform 5
+                    { x: 475, y: 290 },   // Platform 6 (adjusted)
+                    { x: 325, y: 250 },   // Platform 7 (adjusted)
+                    { x: 175, y: 210 },   // Platform 8 (adjusted)
+                    { x: 400, y: 170 },   // Platform 9 (adjusted)
+                    { x: 545, y: 130 },   // Platform 10 (adjusted)
+                ],
+                monsters: [
+                    { platform: 1, x: 220, y: 456 },   // Platform 2
+                    { platform: 2, x: 340, y: 416 },   // Platform 3 (adjusted)
+                    { platform: 4, x: 600, y: 336 },   // Platform 5
+                    { platform: 5, x: 450, y: 296 },   // Platform 6 (adjusted)
+                    { platform: 7, x: 150, y: 216 },   // Platform 8 (adjusted)
+                    { platform: 8, x: 370, y: 176 },   // Platform 9 (adjusted)
+                    { platform: 9, x: 520, y: 136 },   // Platform 10 (adjusted)
+                ],
+                exit: { x: 360, y: 90 }   // Adjusted to match final platform
             }
-        });
-
-        onKeyPress("space", () => {
-            if (grounded) {
-                player.vel.y = -JUMP_FORCE;
-                grounded = false;
-                createJumpParticles(player.pos.x + 14, player.pos.y + 28);
-            }
-        });
+        };
 
         // Particle effect functions
         function createJumpParticles(x, y) {
@@ -274,180 +336,650 @@
             }
         }
 
-        // Game state
-        let coinsCollected = 0;
-        let totalCoins = 0;
-        let playerLives = 3;
-        let gameOver = false;
+        function createLevelCompleteParticles() {
+            for (let i = 0; i < 20; i++) {
+                add([
+                    circle(3),
+                    color(rand(100, 255), rand(100, 255), rand(100, 255)),
+                    pos(rand(0, width()), rand(0, height())),
+                    lifespan(2),
+                    move(vec2(rand(-100, 100), rand(-200, -50))),
+                    "celebrationParticle"
+                ]);
+            }
+        }
 
-        // Enhanced coins positioned on optimized platforms
-        const coinPositions = [
-            { x: 275, y: 430 },  // On platform 1 (y: 460 - 30)
-            { x: 460, y: 350 },  // On platform 2 (y: 380 - 30)  
-            { x: 640, y: 280 },  // On platform 3 (y: 310 - 30)
-            { x: 390, y: 210 },  // On platform 4 (y: 240 - 30)
-            { x: 185, y: 140 },  // On platform 5 (y: 170 - 30)
-            { x: 560, y: 70 },   // On platform 6 (y: 100 - 30)
-            { x: 140, y: 30 },   // On platform 7 (y: 60 - 30)
-            { x: 700, y: 170 },  // On platform 8 (y: 200 - 30)
-        ];
-
-        // Add enhanced coins with glow effect
-        coinPositions.forEach(coinPos => {
-            // Outer glow
-            add([
-                circle(12),
-                color(255, 255, 100),
-                opacity(0.3),
-                pos(coinPos.x, coinPos.y),
-                "coinGlow"
+        // Dialogue system
+        function showDialogue(levelNum) {
+            const dialogue = levelData[levelNum].dialogue;
+            showingDialogue = true;
+            dialogueStep = 0;
+            
+            // Create dialogue box background
+            dialogueBox = add([
+                rect(width() - 40, 120),
+                color(0, 0, 0),
+                opacity(0.8),
+                pos(20, height() - 140),
+                outline(2, [255, 255, 255]),
+                "dialogueBox"
             ]);
             
-            // Main coin
-            const coin = add([
-                circle(8),
-                color(255, 255, 0),
-                outline(1, [255, 200, 0]),
-                pos(coinPos.x, coinPos.y),
-                area(),
-                "coin"
+            // Create dialogue text
+            dialogueText = add([
+                text("", { size: 16, width: width() - 80 }),
+                pos(40, height() - 120),
+                color(255, 255, 255),
+                "dialogueText"
             ]);
             
-            // Add custom properties separately
-            coin.rotationSpeed = 2;
-            coin.bobTime = 0;
-            totalCoins++;
-        });
-
-        // Create AI monsters that patrol optimized platforms
-        const monsterData = [
-            { platform: 0, x: 250, y: 436 },  // On platform 1 (y: 460 - 24)
-            { platform: 2, x: 620, y: 286 },  // On platform 3 (y: 310 - 24)  
-            { platform: 4, x: 150, y: 146 },  // On platform 5 (y: 170 - 24)
-            { platform: 6, x: 110, y: 36 },   // On platform 7 (y: 60 - 24)
-        ];
-
-        const monsters = [];
-        monsterData.forEach((monsterInfo, index) => {
-            // Monster body
-            const monster = add([
-                rect(24, 24),
-                color(...MONSTER_COLOR),
-                outline(2, [100, 20, 150]),
-                pos(monsterInfo.x, monsterInfo.y),
-                area(),
-                "monster"
-            ]);
+            // Show first dialogue
+            updateDialogue(dialogue);
+        }
+        
+        function updateDialogue(dialogue) {
+            const lines = [
+                `Player: ${dialogue.player}`,
+                `Monster: ${dialogue.monster}`,
+                `Player: ${dialogue.playerResponse}`,
+                `Monster: ${dialogue.monsterResponse}`
+            ];
             
-            // Monster spikes
-            const spike1 = add([
-                polygon([vec2(0, 0), vec2(4, -8), vec2(8, 0)]),
-                color(200, 50, 250),
-                pos(monsterInfo.x + 4, monsterInfo.y),
-                "monsterSpike"
-            ]);
-
-            const spike2 = add([
-                polygon([vec2(0, 0), vec2(4, -8), vec2(8, 0)]),
-                color(200, 50, 250),
-                pos(monsterInfo.x + 12, monsterInfo.y),
-                "monsterSpike"
-            ]);
-
-            // Glowing monster eyes
-            const monsterEye1 = add([
-                circle(2),
-                color(255, 0, 0),
-                pos(monsterInfo.x + 6, monsterInfo.y + 8),
-                "monsterEye"
-            ]);
-
-            const monsterEye2 = add([
-                circle(2),
-                color(255, 0, 0),
-                pos(monsterInfo.x + 16, monsterInfo.y + 8),
-                "monsterEye"
-            ]);
-            
-            // Store references for animation
-            monster.spikes = [spike1, spike2];
-            monster.eyes = [monsterEye1, monsterEye2];
-            monster.patrolLeft = platforms[monsterInfo.platform].x + 10;
-            monster.patrolRight = platforms[monsterInfo.platform].x + platforms[monsterInfo.platform].width - 34;
-            monster.direction = index % 2 === 0 ? 1 : -1;
-            monster.speed = 50 + Math.random() * 30;
-            monster.animTime = 0;
-            monster.platformIndex = monsterInfo.platform;
-            
-            monsters.push(monster);
-        });
-
-        // Add UI elements
-        const coinText = add([
-            text(`Coins: ${coinsCollected}/${totalCoins}`, { size: 24 }),
-            pos(20, 20),
-            color(255, 255, 255),
-            fixed(),
-            "ui"
-        ]);
-
-        const livesText = add([
-            text(`Lives: ${playerLives}`, { size: 24 }),
-            pos(20, 50),
-            color(255, 100, 100),
-            fixed(),
-            "ui"
-        ]);
-
-        // Enhanced coin collection with effects
-        player.onCollide("coin", (coin) => {
-            // Remove coin and its glow
-            const coinPos = coin.pos.clone();
-            coin.destroy();
-            
-            // Remove corresponding glow
-            get("coinGlow").forEach(glow => {
-                if (glow.pos.dist(coinPos) < 5) {
-                    glow.destroy();
+            if (dialogueStep < lines.length) {
+                dialogueText.text = lines[dialogueStep];
+                
+                // Add continue instruction
+                if (dialogueStep < lines.length - 1) {
+                    dialogueText.text += "\n\n[Press SPACE to continue...]";
+                } else {
+                    dialogueText.text += "\n\n[Press SPACE to start level!]";
                 }
-            });
+            }
+        }
+        
+        function hideDialogue() {
+            showingDialogue = false;
+            dialogueStep = 0;
             
-            coinsCollected++;
-            coinText.text = `Coins: ${coinsCollected}/${totalCoins}`;
+            if (dialogueBox) {
+                dialogueBox.destroy();
+                dialogueBox = null;
+            }
+            if (dialogueText) {
+                dialogueText.destroy();
+                dialogueText = null;
+            }
+        }
+
+        function createMonsterDeathParticles(x, y) {
+            // Purple explosion particles
+            for (let i = 0; i < 12; i++) {
+                add([
+                    rect(4, 4),
+                    color(150 + rand(-50, 50), 50 + rand(-30, 30), 200 + rand(-50, 50)),
+                    pos(x + rand(-5, 5), y + rand(-5, 5)),
+                    lifespan(1.2),
+                    move(vec2(rand(-120, 120), rand(-150, 150))),
+                    "monsterDeathParticle"
+                ]);
+            }
             
-            // Enhanced collection effects
-            createCoinParticles(coinPos.x, coinPos.y);
+            // Star-like sparkles
+            for (let i = 0; i < 8; i++) {
+                add([
+                    circle(2),
+                    color(255, 255, 100),
+                    pos(x, y),
+                    lifespan(0.8),
+                    move(vec2(rand(-80, 80), rand(-100, 100))),
+                    "monsterDeathSparkle"
+                ]);
+            }
+            
+            // "DESTROYED!" text effect
             add([
-                text("+1", { size: 20 }),
-                pos(coinPos.x, coinPos.y),
+                text("DESTROYED!", { size: 16 }),
+                pos(x - 30, y - 20),
                 color(255, 255, 0),
                 lifespan(1),
-                move(UP, 50),
-                "collectEffect"
+                move(UP, 30),
+                "monsterDeathText"
             ]);
+        }
+
+        // Initialize level
+        function initLevel(levelNum) {
+            // Clear existing objects
+            destroyAll("platform");
+            destroyAll("coin");
+            destroyAll("coinGlow");
+            destroyAll("coinSparkle");
+            destroyAll("monster");
+            destroyAll("monsterSpike");
+            destroyAll("monsterEye");
+            destroyAll("monsterDeathParticle");
+            destroyAll("monsterDeathSparkle");
+            destroyAll("monsterDeathText");
+            destroyAll("exit");
+            destroyAll("grass");
+            destroyAll("star");
+            destroyAll("dialogueBox");
+            destroyAll("dialogueText");
+
+            const level = levelData[levelNum];
+            coinsCollected = 0;
+            totalCoins = level.coins.length;
+            levelComplete = false;
+            monsters = [];
             
-            // Check win condition
-            if (coinsCollected >= totalCoins && !gameOver) {
-                add([
-                    text("YOU WIN! All coins collected!", { size: 32 }),
-                    pos(width()/2 - 200, height()/2),
-                    color(0, 255, 0),
-                    fixed(),
-                    "winText"
+            // Reset lives to 3 for each new level
+            playerLives = 3;
+
+            // Add themed background stars
+            for (let i = 0; i < 20; i++) {
+                const star = add([
+                    circle(1 + Math.random() * 2),
+                    color(...level.theme.starColor),
+                    pos(Math.random() * 800, Math.random() * 400),
+                    opacity(0.7),
+                    "star"
                 ]);
-                gameOver = true;
+                star.twinkleTime = Math.random() * Math.PI * 2;
+            }
+
+            // Create themed ground platform
+            add([
+                rect(800, 60),
+                color(...level.theme.groundColor),
+                outline(2, [0, 0, 0]),
+                pos(0, 540),
+                area(),
+                "platform"
+            ]);
+
+            // Create themed level platforms
+            level.platforms.forEach((platform, index) => {
+                add([
+                    rect(platform.width, platform.height),
+                    color(...level.theme.platformColor),
+                    outline(1, [0, 100, 0]),
+                    pos(platform.x, platform.y),
+                    area(),
+                    "platform"
+                ]);
+                
+                // Add decorative grass
+                for (let i = 0; i < 2; i++) {
+                    add([
+                        rect(2, 6),
+                        color(0, 180, 0),
+                        pos(platform.x + (i + 1) * platform.width/3, platform.y - 6),
+                        "grass"
+                    ]);
+                }
+            });
+
+            // Create coins
+            level.coins.forEach(coinPos => {
+                // Outer glow
+                add([
+                    circle(15),
+                    color(255, 255, 100),
+                    opacity(0.2),
+                    pos(coinPos.x, coinPos.y),
+                    "coinGlow"
+                ]);
+                
+                // Themed main coin
+                const coin = add([
+                    circle(8),
+                    color(...level.theme.coinColor),
+                    outline(2, [255, 200, 0]),
+                    pos(coinPos.x, coinPos.y),
+                    area(),
+                    "coin"
+                ]);
+                
+                // Inner sparkle
+                add([
+                    circle(4),
+                    color(255, 255, 200),
+                    pos(coinPos.x, coinPos.y),
+                    "coinSparkle"
+                ]);
+                
+                coin.rotationSpeed = 2;
+                coin.bobTime = 0;
+            });
+
+            // Create monsters
+            level.monsters.forEach((monsterInfo, index) => {
+                const platform = level.platforms[monsterInfo.platform];
+                
+                // Monster body
+                const monster = add([
+                    rect(24, 24),
+                    color(...MONSTER_COLOR),
+                    outline(2, [100, 20, 150]),
+                    pos(monsterInfo.x, monsterInfo.y),
+                    area(),
+                    "monster"
+                ]);
+                
+                // Monster spikes
+                const spike1 = add([
+                    polygon([vec2(0, 0), vec2(4, -8), vec2(8, 0)]),
+                    color(200, 50, 250),
+                    pos(monsterInfo.x + 4, monsterInfo.y),
+                    "monsterSpike"
+                ]);
+
+                const spike2 = add([
+                    polygon([vec2(0, 0), vec2(4, -8), vec2(8, 0)]),
+                    color(200, 50, 250),
+                    pos(monsterInfo.x + 12, monsterInfo.y),
+                    "monsterSpike"
+                ]);
+
+                // Glowing monster eyes
+                const monsterEye1 = add([
+                    circle(2),
+                    color(255, 0, 0),
+                    pos(monsterInfo.x + 6, monsterInfo.y + 8),
+                    "monsterEye"
+                ]);
+
+                const monsterEye2 = add([
+                    circle(2),
+                    color(255, 0, 0),
+                    pos(monsterInfo.x + 16, monsterInfo.y + 8),
+                    "monsterEye"
+                ]);
+                
+                // Store references
+                monster.spikes = [spike1, spike2];
+                monster.eyes = [monsterEye1, monsterEye2];
+                monster.patrolLeft = platform.x + 10;
+                monster.patrolRight = platform.x + platform.width - 34;
+                monster.direction = index % 2 === 0 ? 1 : -1;
+                monster.speed = 40 + levelNum * 10; // Monsters get faster each level
+                monster.animTime = 0;
+                
+                monsters.push(monster);
+            });
+
+            // Create exit portal
+            const exit = add([
+                rect(30, 50),
+                color(0, 255, 255),
+                outline(3, [0, 200, 200]),
+                pos(level.exit.x, level.exit.y),
+                area(),
+                "exit"
+            ]);
+
+            // Add exit glow effect
+            add([
+                circle(25),
+                color(0, 255, 255),
+                opacity(0.3),
+                pos(level.exit.x + 15, level.exit.y + 25),
+                "exitGlow"
+            ]);
+
+            // Update UI
+            if (levelText) levelText.text = `Level ${levelNum}: ${level.name} - ${level.theme.name}`;
+            if (coinText) coinText.text = `Coins: ${coinsCollected}/${totalCoins}`;
+            if (livesText) livesText.text = `Lives: ${playerLives}`;
+            
+            // Set themed background color
+            canvas.style.backgroundColor = `rgb(${level.theme.skyColor.join(',')})`;
+            
+            // Reset player position
+            if (player) {
+                player.pos = vec2(100, 300);
+                player.vel = vec2(0, 0);
+            }
+            
+            // Show dialogue for this level
+            showDialogue(levelNum);
+        }
+
+        // Create player and UI
+        function initGame() {
+            // Create enhanced player character
+            player = add([
+                rect(28, 28),
+                outline(2, [255, 255, 255]),
+            color(...PLAYER_COLOR),
+            pos(100, 300),
+            area(),
+            body(),
+            "player"
+        ]);
+
+            player.animationTime = 0;
+            player.facingRight = true;
+            player.blinkTimer = 0;
+
+            // Player parts
+            playerFace = add([
+                circle(10),
+                color(255, 150, 150),
+                pos(player.pos.x + 14, player.pos.y + 10),
+                "playerFace"
+            ]);
+
+            leftEye = add([
+                circle(3),
+                color(255, 255, 255),
+                pos(player.pos.x + 9, player.pos.y + 8),
+                "playerEye"
+            ]);
+
+            rightEye = add([
+                circle(3),
+                color(255, 255, 255),
+                pos(player.pos.x + 19, player.pos.y + 8),
+                "playerEye"
+            ]);
+
+            leftPupil = add([
+                circle(1.5),
+                color(0, 0, 0),
+                pos(player.pos.x + 9, player.pos.y + 8),
+                "playerPupil"
+            ]);
+
+            rightPupil = add([
+                circle(1.5),
+                color(0, 0, 0),
+                pos(player.pos.x + 19, player.pos.y + 8),
+                "playerPupil"
+            ]);
+
+            leftFoot = add([
+                rect(6, 4),
+                color(150, 50, 50),
+                pos(player.pos.x + 3, player.pos.y + 28),
+                "playerFoot"
+            ]);
+
+            rightFoot = add([
+                rect(6, 4),
+                color(150, 50, 50),
+                pos(player.pos.x + 19, player.pos.y + 28),
+                "playerFoot"
+            ]);
+
+            // Create UI
+            levelText = add([
+                text(`Level ${currentLevel}: ${levelData[currentLevel].name}`, { size: 24 }),
+                pos(20, 20),
+                color(255, 255, 255),
+                fixed(),
+                "ui"
+            ]);
+
+            coinText = add([
+                text(`Coins: ${coinsCollected}/${totalCoins}`, { size: 20 }),
+                pos(20, 50),
+                color(255, 255, 255),
+                fixed(),
+                "ui"
+            ]);
+
+            livesText = add([
+                text(`Lives: ${playerLives}`, { size: 20 }),
+                pos(20, 75),
+                color(255, 100, 100),
+                fixed(),
+                "ui"
+            ]);
+
+            // Debug text for movement states
+            const debugText = add([
+                text(`Debug: L:${moveLeft} R:${moveRight}`, { size: 16 }),
+                pos(20, 100),
+                color(255, 255, 0),
+                fixed(),
+                "debug"
+            ]);
+
+            // Initialize first level
+            initLevel(currentLevel);
+        }
+
+        // Direct movement controls - simple approach
+        onKeyDown("a", () => { 
+            if (showingDialogue) return; // Disable movement during dialogue
+            moveLeft = true;
+            if (player) {
+                player.vel.x = -MOVE_SPEED;
+                console.log("A pressed, vel.x set to", player.vel.x);
+            }
+        });
+        onKeyDown("left", () => {
+            if (showingDialogue) return; // Disable movement during dialogue
+            moveLeft = true;
+            if (player) {
+                player.vel.x = -MOVE_SPEED;
+                console.log("Left pressed, vel.x set to", player.vel.x);
+            }
+        });
+        onKeyDown("d", () => {
+            if (showingDialogue) return; // Disable movement during dialogue
+            moveRight = true;
+            if (player) {
+                player.vel.x = MOVE_SPEED;
+                console.log("D pressed, vel.x set to", player.vel.x);
+            }
+        });
+                onKeyDown("right", () => {
+            if (showingDialogue) return; // Disable movement during dialogue
+            moveRight = true;
+            if (player) {
+                player.vel.x = MOVE_SPEED;
+                console.log("Right pressed, vel.x set to", player.vel.x);
             }
         });
 
-        // Player death and respawn system
+        onKeyRelease(["a", "left"], () => { 
+            moveLeft = false;
+            if (player && !moveRight) {
+                player.vel.x = 0;
+                console.log("Left released, vel.x set to 0");
+            }
+        });
+        onKeyRelease(["d", "right"], () => { 
+            moveRight = false;
+            if (player && !moveLeft) {
+                player.vel.x = 0;
+                console.log("Right released, vel.x set to 0");
+            }
+        });
+
+        // Jump controls
+        onKeyPress("w", () => {
+            if (player && grounded) {
+                player.vel.y = -JUMP_FORCE;
+                grounded = false;
+                createJumpParticles(player.pos.x + 14, player.pos.y + 28);
+            }
+        });
+
+        onKeyPress("space", () => {
+            // Handle dialogue progression
+            if (showingDialogue) {
+                const dialogue = levelData[currentLevel].dialogue;
+                dialogueStep++;
+                
+                if (dialogueStep < 4) {
+                    updateDialogue(dialogue);
+                } else {
+                    hideDialogue();
+                }
+                return;
+            }
+            
+            // Normal jump
+            if (player && grounded) {
+                player.vel.y = -JUMP_FORCE;
+                grounded = false;
+                createJumpParticles(player.pos.x + 14, player.pos.y + 28);
+            }
+        });
+
+        // Level progression
+        onKeyPress("enter", () => {
+            if (levelComplete && currentLevel < maxLevel) {
+                currentLevel++;
+                initLevel(currentLevel);
+            } else if (gameOver) {
+                // Restart game
+                currentLevel = 1;
+                playerLives = 3;
+                gameOver = false;
+                levelComplete = false;
+                destroyAll("gameOverText");
+                destroyAll("restartText");
+                destroyAll("winText");
+                initLevel(currentLevel);
+            }
+        });
+
+        // Collision handlers
+        function setupCollisionHandlers() {
+            if (!player) return;
+            
+            // Coin collection
+            player.onCollide("coin", (coin) => {
+                const coinPos = coin.pos.clone();
+                coin.destroy();
+                
+                // Remove glow and sparkle
+                get("coinGlow").forEach(glow => {
+                    if (glow.pos.dist(coinPos) < 5) glow.destroy();
+                });
+                get("coinSparkle").forEach(sparkle => {
+                    if (sparkle.pos.dist(coinPos) < 5) sparkle.destroy();
+                });
+                
+                coinsCollected++;
+                coinText.text = `Coins: ${coinsCollected}/${totalCoins}`;
+                
+                createCoinParticles(coinPos.x, coinPos.y);
+                add([
+                    text("+1", { size: 20 }),
+                    pos(coinPos.x, coinPos.y),
+                    color(255, 255, 0),
+                    lifespan(1),
+                    move(UP, 50),
+                    "collectEffect"
+                ]);
+            });
+
+            // Exit collision
+            player.onCollide("exit", () => {
+                if (coinsCollected >= totalCoins && !levelComplete) {
+                    levelComplete = true;
+                    createLevelCompleteParticles();
+                    
+                    if (currentLevel >= maxLevel) {
+                        // Game completed
+                        add([
+                            text("GAME COMPLETED!", { size: 48 }),
+                            pos(width()/2 - 200, height()/2 - 100),
+                            color(0, 255, 0),
+                            fixed(),
+                            "winText"
+                        ]);
+                        add([
+                            text("You mastered all 5 levels!", { size: 24 }),
+                            pos(width()/2 - 150, height()/2 - 50),
+                            color(255, 255, 255),
+                            fixed(),
+                            "winText"
+                        ]);
+                        add([
+                            text("Press ENTER to restart", { size: 20 }),
+                            pos(width()/2 - 120, height()/2),
+                            color(255, 255, 255),
+                            fixed(),
+                            "winText"
+                        ]);
+                        gameOver = true;
+                    } else {
+                        // Level completed
+                        add([
+                            text(`Level ${currentLevel} Complete!`, { size: 36 }),
+                            pos(width()/2 - 150, height()/2 - 50),
+                            color(0, 255, 0),
+                            fixed(),
+                            lifespan(3),
+                            "levelCompleteText"
+                        ]);
+                        add([
+                            text("Press ENTER for next level", { size: 20 }),
+                            pos(width()/2 - 120, height()/2),
+                            color(255, 255, 255),
+                            fixed(),
+                            lifespan(3),
+                            "levelCompleteText"
+                        ]);
+                    }
+                }
+            });
+
+            // Enhanced monster collision - jump to destroy or get hurt
+            player.onCollide("monster", (monster) => {
+                // Check if player is falling down onto the monster (jumping on top)
+                if (player.vel.y > 0 && player.pos.y < monster.pos.y) {
+                    // Player jumped on monster - destroy it!
+                    destroyMonster(monster);
+                    
+                    // Give player a small bounce
+                    player.vel.y = -300; // Small bounce up
+                } else {
+                    // Player hit monster from side or below - take damage
+                    playerDeath();
+                }
+            });
+        }
+
+        // Monster destruction system
+        function destroyMonster(monster) {
+            // Create death particles at monster position
+            createMonsterDeathParticles(monster.pos.x + 12, monster.pos.y + 12);
+            
+            // Remove monster and its parts from the monsters array
+            const monsterIndex = monsters.indexOf(monster);
+            if (monsterIndex > -1) {
+                monsters.splice(monsterIndex, 1);
+            }
+            
+            // Destroy the monster and its parts
+            if (monster.spikes) {
+                monster.spikes.forEach(spike => {
+                    if (spike.exists()) spike.destroy();
+                });
+            }
+            if (monster.eyes) {
+                monster.eyes.forEach(eye => {
+                    if (eye.exists()) eye.destroy();
+                });
+            }
+            monster.destroy();
+        }
+
+        // Death system
         function playerDeath() {
-            if (gameOver) return;
+            if (gameOver || levelComplete) return;
             
             createDeathParticles(player.pos.x + 14, player.pos.y + 14);
             playerLives--;
             livesText.text = `Lives: ${playerLives}`;
             
-            // Death effect
             add([
                 text("OUCH!", { size: 24 }),
                 pos(player.pos.x, player.pos.y - 30),
@@ -457,7 +989,6 @@
             ]);
             
             if (playerLives <= 0) {
-                // Game over
                 add([
                     text("GAME OVER!", { size: 48 }),
                     pos(width()/2 - 150, height()/2 - 50),
@@ -466,7 +997,7 @@
                     "gameOverText"
                 ]);
                 add([
-                    text("Refresh to play again", { size: 24 }),
+                    text("Press ENTER to restart", { size: 24 }),
                     pos(width()/2 - 120, height()/2 + 20),
                     color(255, 255, 255),
                     fixed(),
@@ -474,57 +1005,145 @@
                 ]);
                 gameOver = true;
             } else {
-                // Respawn player
                 player.pos = vec2(100, 300);
                 player.vel = vec2(0, 0);
                 grounded = false;
             }
         }
 
-        // Monster collision
-        player.onCollide("monster", () => {
-            playerDeath();
-        });
+        // Consolidated player update function
+        function setupPlayerUpdate() {
+            if (!player) return;
+            
+        player.onUpdate(() => {
+                if (gameOver) return;
 
-        // Enhanced update loop with animations
+                // Movement is now handled directly in key events
+                // No need to override velocity here
+
+                // Platform collision detection
+                grounded = false;
+                
+                get("platform").forEach((platform) => {
+                    const platLeft = platform.pos.x;
+                    const platRight = platform.pos.x + platform.width;
+                    const platTop = platform.pos.y;
+                    const platBottom = platform.pos.y + platform.height;
+                    
+                    const playerLeft = player.pos.x;
+                    const playerRight = player.pos.x + 28;
+                    const playerTop = player.pos.y;
+                    const playerBottom = player.pos.y + 28;
+                    
+                    if (playerRight > platLeft && playerLeft < platRight && 
+                        playerBottom > platTop && playerTop < platBottom) {
+                        
+                        const overlapLeft = playerRight - platLeft;
+                        const overlapRight = platRight - playerLeft;
+                        const overlapTop = playerBottom - platTop;
+                        const overlapBottom = platBottom - playerTop;
+                        
+                        const minOverlap = Math.min(overlapLeft, overlapRight, overlapTop, overlapBottom);
+                        
+                        if (minOverlap === overlapTop && player.vel.y > 0) {
+                            player.pos.y = platTop - 28;
+                            player.vel.y = 0;
+                            grounded = true;
+                        } else if (minOverlap === overlapBottom && player.vel.y < 0) {
+                            player.pos.y = platBottom;
+                            player.vel.y = 0;
+                        } else if (minOverlap === overlapLeft && player.vel.x > 0) {
+                            player.pos.x = platLeft - 28;
+                            player.vel.x = 0;
+                        } else if (minOverlap === overlapRight && player.vel.x < 0) {
+                            player.pos.x = platRight;
+                            player.vel.x = 0;
+                        }
+                    }
+                });
+
+                // Camera follows player
+            camPos(player.pos.x, 300);
+
+                // Death by falling
+                if (player.pos.y > 700) {
+                    playerDeath();
+                }
+
+                // Visual feedback
+                if (grounded) {
+                player.color = rgb(...PLAYER_COLOR);
+            } else {
+                player.color = rgb(200, 80, 80);
+            }
+        });
+        }
+
+        // Main game loop
         onUpdate(() => {
-            if (gameOver) return;
+            if (gameOver || !player) return;
+
+            // Update debug info
+            get("debug").forEach(debug => {
+                debug.text = `Debug: L:${moveLeft} R:${moveRight} Vel:${Math.round(player.vel.x)} Pos:${Math.round(player.pos.x)}`;
+            });
 
             // Update player parts positions
-            playerFace.pos = vec2(player.pos.x + 14, player.pos.y + 10);
-            leftEye.pos = vec2(player.pos.x + 9, player.pos.y + 8);
-            rightEye.pos = vec2(player.pos.x + 19, player.pos.y + 8);
-            leftPupil.pos = vec2(player.pos.x + 9, player.pos.y + 8);
-            rightPupil.pos = vec2(player.pos.x + 19, player.pos.y + 8);
-            leftFoot.pos = vec2(player.pos.x + 3, player.pos.y + 28);
-            rightFoot.pos = vec2(player.pos.x + 19, player.pos.y + 28);
+            if (playerFace) playerFace.pos = vec2(player.pos.x + 14, player.pos.y + 10);
+            if (leftEye) leftEye.pos = vec2(player.pos.x + 9, player.pos.y + 8);
+            if (rightEye) rightEye.pos = vec2(player.pos.x + 19, player.pos.y + 8);
+            if (leftPupil) leftPupil.pos = vec2(player.pos.x + 9, player.pos.y + 8);
+            if (rightPupil) rightPupil.pos = vec2(player.pos.x + 19, player.pos.y + 8);
+            if (leftFoot) leftFoot.pos = vec2(player.pos.x + 3, player.pos.y + 28);
+            if (rightFoot) rightFoot.pos = vec2(player.pos.x + 19, player.pos.y + 28);
 
-            // Player blinking animation
+            // Player animations
             player.blinkTimer += dt();
             if (player.blinkTimer > 3) {
-                leftEye.scale = vec2(1, 0.1);
-                rightEye.scale = vec2(1, 0.1);
+                if (leftEye) leftEye.scale = vec2(1, 0.1);
+                if (rightEye) rightEye.scale = vec2(1, 0.1);
                 if (player.blinkTimer > 3.2) {
-                    leftEye.scale = vec2(1, 1);
-                    rightEye.scale = vec2(1, 1);
+                    if (leftEye) leftEye.scale = vec2(1, 1);
+                    if (rightEye) rightEye.scale = vec2(1, 1);
                     player.blinkTimer = 0;
                 }
             }
 
+            player.animationTime += dt();
+            if (player.vel.x > 0) player.facingRight = true;
+            else if (player.vel.x < 0) player.facingRight = false;
+            
+            if (Math.abs(player.vel.x) > 0 && grounded) {
+                player.angle = Math.sin(player.animationTime * 8) * 0.1;
+                if (leftFoot) leftFoot.pos.y = player.pos.y + 28 + Math.sin(player.animationTime * 10) * 2;
+                if (rightFoot) rightFoot.pos.y = player.pos.y + 28 + Math.sin(player.animationTime * 10 + Math.PI) * 2;
+            } else {
+                player.angle = 0;
+            }
+
+            // Animate stars
+            get("star").forEach(star => {
+                star.twinkleTime += dt();
+                star.opacity = 0.3 + Math.sin(star.twinkleTime * 2) * 0.4;
+            });
+
             // Animate coins
             get("coin").forEach(coin => {
                 coin.bobTime += dt();
-                coin.pos.y += Math.sin(coin.bobTime * 3) * 0.5;
+                coin.pos.y += Math.sin(coin.bobTime * 3) * 0.3;
                 coin.angle += coin.rotationSpeed * dt();
             });
 
-            // Enhanced monster AI and animations
+            // Animate exit portal
+            get("exitGlow").forEach(glow => {
+                glow.opacity = 0.2 + Math.sin(time() * 4) * 0.1;
+            });
+
+            // Monster AI
             monsters.forEach(monster => {
                 if (!monster.exists()) return;
                 
                 monster.animTime += dt();
-                
-                // Patrol movement
                 monster.pos.x += monster.direction * monster.speed * dt();
                 
                 // Update monster parts
@@ -536,16 +1155,13 @@
                 monster.eyes.forEach((eye, i) => {
                     eye.pos.x = monster.pos.x + (i === 0 ? 6 : 16);
                     eye.pos.y = monster.pos.y + 8;
-                    // Glowing eyes effect
                     eye.color = rgb(255, Math.sin(monster.animTime * 6) * 127 + 128, 0);
                 });
                 
-                // Bounce at patrol boundaries
                 if (monster.pos.x <= monster.patrolLeft || monster.pos.x >= monster.patrolRight) {
                     monster.direction *= -1;
                 }
                 
-                // Color pulsing animation
                 const pulse = Math.sin(monster.animTime * 4) * 0.3 + 0.7;
                 monster.color = rgb(
                     MONSTER_COLOR[0] * pulse,
@@ -553,96 +1169,14 @@
                     MONSTER_COLOR[2] * pulse
                 );
             });
-
-            // Enhanced player animations
-            player.animationTime += dt();
-            
-            // Player movement animation
-            if (player.vel.x > 0) {
-                player.facingRight = true;
-            } else if (player.vel.x < 0) {
-                player.facingRight = false;
-            }
-            
-            // Enhanced player animation when moving
-            if (Math.abs(player.vel.x) > 0 && grounded) {
-                player.angle = Math.sin(player.animationTime * 8) * 0.1;
-                leftFoot.pos.y = player.pos.y + 28 + Math.sin(player.animationTime * 10) * 2;
-                rightFoot.pos.y = player.pos.y + 28 + Math.sin(player.animationTime * 10 + Math.PI) * 2;
-            } else {
-                player.angle = 0;
-            }
         });
 
-        // Platform collision system
-        player.onUpdate(() => {
-            if (gameOver) return;
-            
-            // Check platform collisions manually for better control
-            grounded = false;
-            
-            get("platform").forEach((platform) => {
-                // Get platform bounds
-                const platLeft = platform.pos.x;
-                const platRight = platform.pos.x + platform.width;
-                const platTop = platform.pos.y;
-                const platBottom = platform.pos.y + platform.height;
-                
-                // Get player bounds
-                const playerLeft = player.pos.x;
-                const playerRight = player.pos.x + 28;
-                const playerTop = player.pos.y;
-                const playerBottom = player.pos.y + 28;
-                
-                // Check if player is overlapping with platform
-                if (playerRight > platLeft && playerLeft < platRight && 
-                    playerBottom > platTop && playerTop < platBottom) {
-                    
-                    // Player is inside platform - determine which side to push out
-                    const overlapLeft = playerRight - platLeft;
-                    const overlapRight = platRight - playerLeft;
-                    const overlapTop = playerBottom - platTop;
-                    const overlapBottom = platBottom - playerTop;
-                    
-                    // Find smallest overlap to determine collision side
-                    const minOverlap = Math.min(overlapLeft, overlapRight, overlapTop, overlapBottom);
-                    
-                    if (minOverlap === overlapTop && player.vel.y > 0) {
-                        // Landing on top of platform
-                        player.pos.y = platTop - 28;
-                        player.vel.y = 0;
-                        grounded = true;
-                    } else if (minOverlap === overlapBottom && player.vel.y < 0) {
-                        // Hitting platform from below
-                        player.pos.y = platBottom;
-                        player.vel.y = 0;
-                    } else if (minOverlap === overlapLeft && player.vel.x > 0) {
-                        // Hitting platform from left
-                        player.pos.x = platLeft - 28;
-                        player.vel.x = 0;
-                    } else if (minOverlap === overlapRight && player.vel.x < 0) {
-                        // Hitting platform from right
-                        player.pos.x = platRight;
-                        player.vel.x = 0;
-                    }
-                }
-            });
+        
 
-            // Camera follows player horizontally
-            camPos(player.pos.x, 300);
-
-            // Reset player if they fall off screen
-            if (player.pos.y > 700) {
-                playerDeath();
-            }
-
-            // Enhanced visual feedback
-            if (grounded) {
-                player.color = rgb(...PLAYER_COLOR);
-            } else {
-                player.color = rgb(200, 80, 80);
-            }
-        });
+        // Start the game
+        initGame();
+        setupCollisionHandlers();
+        setupPlayerUpdate();
     </script>
 </body>
 </html>
